@@ -1,0 +1,43 @@
+Lesson 313
+* JS in the Browser                                vs.  * JS with Node
+Executed by adding script tags to an HTML document      Executed by running the Node CLI from your terminal
+We get access to the DOM and related objects (window)   No DOM exists!
+Code can reference variables in other files freely      Each file is its own seperate world
+Include libraries by adding script tags (more           Include lbiraries by using NPM (node package manager)
+complicated solutions exist)                 
+
+314
+Enter node REPL with command "node"
+Execute a file (index.js) in the same directory with "node index.js"
+Quit out of either one with keyboard shortcut ctrl+c
+
+315-318
+* For JS in the browser, code is shared easily among files. If myscript.js defines a variable "message", another file
+index.js can easily make use of it. You simply link both files up via script tags in the HTML file.
+* Node is different! Have to use the Module System
+    in index.js: const message = require("./myscript.js")
+    in myscript.js: module.exports = "hi";
+    Note the use of a relative path
+In Node, technically all the code within a JS file is being wrapped automatically inside of a function and then being executed.
+    It looks something like: function(exports, require, module, __filename, __dirname) { <your code> };
+    * exports: Equivalent to "module.exports". We can technically export code using this, but it's easier to use "module.exports" b/c of a little corner  case
+    * require: Function to get access to the exports from another files
+    * module: Object that defines some properties + information about the current file
+    __filename: Full path + file name of this file
+    __dirname: Full path of this file
+    Can use console.log(arguments) in our file to see that these exist
+Files only get required / ran once! If you "require" a file a second time, it just retrieves the export value you're looking for.
+    Why do we care? If we define a counter object, for example, and require that in one file as counter1, and increment it, if we then
+    attempt to create a second counter object doing counter2 = require("./counter.js"), we don't get a fresh counter! It'll still be incremented.
+
+319: Debugging with Node
+3 ways:     node inspect index.js           Start up a debug CLI and pause execution whenever a debugger statement is hit
+            node --inspect index.js         Start up debug instance and pause execution whenever debug statement hit. Access at "chrome://inspect"
+            node --inspect-brk index.js     Start...and WAIT to execute until a debugger is connected. Access at "chrome://inspect" -- most useful of the 3!
+
+320: 
+In command line, can show the list of files in current directory with the 'ls' command
+    Can call it with no arguments => Prints out files and folders in current directory
+    Can call it with a path => Prints out f iles and folders in relative or absolute path provided
+
+    In browser, we don't have any access to the user's harddrive. In Node we do! Do so with the File System module provided by Node
