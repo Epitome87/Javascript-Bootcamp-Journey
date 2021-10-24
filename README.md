@@ -385,6 +385,255 @@ In this project, we:
 
 #### `Originally Started: 10/23/2021`
 
+(Skipping this section for now)
+
 ## Section 26: Project Start - E-Commerce App
 
 #### `Originally Started: 10/23/2021`
+
+### App Overview
+
+In this section, we're going to start building a simple E-Commerce application! It will be a pretty standard fare: You can browse items, add them to a Cart, and look at the contents of the Cart (there won't be the ability to actually "Checkout"). For Admins of the store, there will be an "Admin Panel" that will let them edit existing products and create new ones.
+
+### App Architecture
+
+We will be creating a Node JS Server that processes incoming user requests from their web browser, and determines which snippets of HTML should be formed together and sent back to the user. We need to store the product information, different Admin users, etc, so we will create our own file-based data store (rather than an online database). The file-based store is merely for learning purposes; we typically want to make use of more typical databases.
+
+Project Setup (common for many projects)
+
+- Create a new project directory
+- Generate a package.json file
+- Install a few dependencies to help us write our project
+- Create a "start" script to run our project
+
+### Package.json Scripts
+
+In this project, we will need to install `express` and `nodemon`. I have `nodemon` installed globally, so I do not need to install it. I should probably install express globally, too!
+
+In the package.json file, we create a "dev" key for the "scripts" portion of our object. Inside the "dev" key, we set it a value of: `nodemon index.js`. We can now type `npm run dev` in our terminal to start our project. We create this "dev" shortcut script so other / future engineers can quickly get an idea of how to manipulate the project. The goal is to communicate to others how to easily start up our project! Ideally we only need to run `npm run dev` once every time we wish to work on our project for the day. Hit Ctrl + C to stop the nodemon process.
+
+### Create a Web Server
+
+The built-in web server included with the Node standard library is a little short on features. We're going to have to end up writing a lot of code ourselves to handle basic operations. So instead, we will make use of the express library! It tremendously helps make and respond to network requests.
+
+To get a web server up and running with express, we simply require it in the code, and then listen to a port, and handle routes.
+
+```
+const express = require('express');
+const app = express();
+
+// Route Handlers
+app.get('/', (request, response) => {
+  response.send('Received "get" request for home route!');
+});
+
+// Start listening to incoming network requests
+app.listen(3000, () => {
+  console.log('Listening on Port 3000');
+});
+```
+
+We then view the page by visiting localhost:3000 in the browser (or whatever port you are listening on).
+
+### Behind the Scenes of a Request
+
+When we visited localhost:3000/, our browser _formulated_ an HTTP request. But the browser itself is not responsible for issuing that request -- it hands it off to our operating system and its network devices.
+
+The HTTP Request has a couple of pieces of information:
+
+- Host: Domain we are trying to access (localhost in our case, or google.com)
+- Port: 3000 (We manually provided 3000, which is convention, but HTTP by default is 80 and HTTPS by default is 443)
+- Path: "/"
+- Method: "GET" (The default method) This indicates the _intent_ of the request. Get? Delete? Update?
+
+The request was handed off to our OS, in charge of accessing some network devices, and sending the reqeust out over the open internet.
+When making a request other than to localhost, our OS is going to reach out to a DNS Server. It is an outside server on the internet which has a mapping between host names and IP Addresses. The DNS Server sends back the IP Address. Our OS then makes a second request to the IP Address and gets a response back.
+
+For localhost, our OS does not reach out to a DNS Server. "I'm going to handle this request on my own!" It looks at the Port specified in the request (65,000 ports for our computer to access). It sees the Port 3000 and takes the request and sends it to whatever piece of software is running on Port 3000. In our case, we told our express server to be listening in on Port 3000! Express receives whatever request was sent. At this point, it does not care about the host or port, only the path and method. Express then runs the request through its Router, looking at the path and method and calling the appropriate callback function that we registered with the router.
+
+Express:
+
+- HTTP Request: Path: "/", Method: "GET"
+- Router:
+
+1. If someone makes a "GET" request with a path of "/", run this function -> Callback function we write
+2. If someone makes a "POST" request with a path of "/products", run this function -> Callback function we write
+3. If someone makes a "GET" request with a path of "/products", run this function -> Callback function we write
+
+Callback function then takes the incoming request and outgoing response, formulate some sort of response, and sends it back to whoever made the original response (in this case, our browser). This Express process happens in a real production environment too, not just our local server.
+
+### Displaying Simple HTML
+
+How do we show HTML? In our express `res.send()` method, instead of just sending a string, we can send HTML! For example:
+
+```
+res.send(<p>Hello!</p>)
+```
+
+### Understanding Form Submissions
+
+By default, whenever we click any button inside of a form, or select an input and hit Enter, the browser is going to do something called an _automatic submission_. It looks at the form element, looks at its input elements, and attempt to collect all the information from each of the inputs that have a "name" property assigned to them. It forms all of this information into a "query string", and appends it to the URL. For example, if we had a name and email input (with their "name" properties supplied thusly), we'd get: `localhost:3000/?name=typedName&email=typedEmail`. By default, the browser makes a "GET" request to the same URL it is currently looking at (before the query string portion).
+
+A "POST" request is commonly associated with creating a record of some time (blog post, comment, new image upload, user account, etc).
+
+Note how when we submitted the form with a "GET" request, all the form data was appended as a query string to the URL. But with a "POST", that information is appended to the request body instead. The "POST" request has a body property which can contain information. How can we access this information that was appended to the request body from the form?
+
+### Parsing Form Data
+
+Typical process when submitting form with POST request:
+
+1. Browser sends HTTP header to the server
+2. Server sees request with path and method
+3. Server runs appropriate callback method.
+4. **Then** the browser starts transmitting info from body of request
+5. Browser sends a little chunk of info, waits for confirmation
+   - 5b. Browser sends a little chunk of info, waits for confirmation.
+   - 5c. Browser sends a little chunk of info, waits for confirmation. Etc
+6. All chunks sent! Request complete!
+
+We have to figure out how to take all these little chunks of info and assemble them bit by it.
+
+To do a very primitive parsing of the body content ourselves, we can use `req.on()`, convert its Buffer representation of our data into a readable String format, and then do some logic on that String to grab our individual key-value pairs:
+
+```
+app.post('/', (req, res) => {
+  req.on('data', (data) => {
+    const parsed = data.toString('utf8').split('&');
+    const formData = {};
+    for (let pair of parsed) {
+      const [key, value] = pair.split('=');
+      formData[key] = value;
+    }
+
+  });
+});
+```
+
+### Middlewares In Express
+
+**Middleware** in Express is a function that does some pre-processing on the "req" and "res" objects. It is the primary means of code reuse in an Express app.
+After a request is made, it goes through the Middleware, before then being sent off to the route handler.
+
+Our form-parsing logic is a perfect candidate to be made a Middleware.
+
+```
+// Middleware for parsing the request body
+function bodyParser(req, res, next) {
+  // We only want to run this Middleware on POST requests
+  if (req.method === 'POST') {
+    req.on('data', (data) => {
+      const parsed = data.toString('utf8').split('&');
+      const formData = {};
+
+      for (let pair of parsed) {
+        const [key, value] = pair.split('=');
+        formData[key] = value;
+      }
+
+      req.body = formData;
+      next();
+    });
+  }
+  // Signal that we are done, and Express can continue
+  else next();
+}
+
+app.post('/', bodyParser, (req, res) => {
+});
+```
+
+### Globally Applying Middleware
+
+Our ipplementation of body parsing isn't ideal: It only handles POST requests so far, while many other request types contain body elements. We can replace it with an outside library: `npm install body-parser` to install, and then use it like:
+
+```
+app.post('/', bodyParser.urlencoded({ extended: true }), (req, res) => {
+```
+
+However, we still have to write out the middleware call every place we want it (as an argument of a route). There's a better solution! We can use the Middeleware globally:
+
+`app.use(bodyParser.urlencoded({extended: true}));`
+
+Now every route will have its body parsed automatically. The body-parser library automatically detects what type of request we are working with and not apply it with a "GET" request.
+
+#### `Originally Completed: 10/23/2021`
+
+## Section 27: Design a Custom Database
+
+#### `Originally Started: 10/23/2021`
+
+### Data Storage
+
+We need some persistent data store in order to preserve customer account information. By persistent, we need a solution that retains the data no matter how many times are server restarts! So we cannot simply store it inside of our computer's memory during program execution. Our express server needs to interface with a data store, which stores a list of users and products. The data store itself is going to store all of its data to our hard drive, in the form of json (products.json and users.json). Note, this will not be suitable for production use -- it is not an ideal solution! It's good for learning purposes, but not something you should use for real software.
+
+The downsides of our solution are:
+
+- Will error if we try to open/write to the same file twice at the same time
+- Won't work if we have multiple servers running on differnet machines
+- We have to write to the File System every time we want to udpate some data => Bad performance!
+
+Why waste our time with this then? Good Javascript experience, practice with code re-use using classes and inheritance.
+
+### Different Data Modeling Approaches
+
+We will have a "Users Repository" and "Products Repository" to store our data. Here is a list of methods we may want to have for the Users Respository:
+
+| Method   | Input Arguments | Return Value | Description                                                   |
+| -------- | --------------- | ------------ | ------------------------------------------------------------- |
+| getAll   | -               | [user]       | Gets a list of all users                                      |
+| getOne   | id              | user         | Finds the user with the given id                              |
+| getOneBy | filters         | user         | Finds one user with the given filters                         |
+| create   | attributes      | null         | Creates a user with the given attributes                      |
+| update   | id, attributes  | null         | Updates the user with the given id using the given attributes |
+| delete   | id              | null         | Delete teh user with the given id                             |
+| randomId | -               | id           | Generates a random Id                                         |
+| writeAll | -               | null         | Writes all users to a users.json file                         |
+
+In the world of Javascript and server design / data management in general, there's 2 popular approaches to managing data:
+
+1. Repository Approach
+
+- A single class (repository) is responsible for data access. All records are stored and users as plain Javascript objects
+
+2. Active Record Approach (not official name, named after Ruby on Rails)
+
+- Every record is an instance of a "model" class that has methods to save, update, delete this record.
+
+We will be taking the first approach.
+
+### Implementing the Users Repository
+
+Even though we should never do it in production software, we are going to do a sync version of the file system function that checks if a file exists. This is okay in our scenario, but we should avoid it usually! We also do this because we want the function to run in our class constructor, which cannot be async.
+
+We can do the following to check if a file exists / create a new file if it does not:
+
+```
+  // Check to see if this file exists
+  try {
+    fs.accessSync(this.filename);
+  } catch (err) {
+    // File doesn't exist; let's create it!
+    fs.writeFileSync(filename, '[]');
+  }
+}
+```
+
+### Opening the Repository Data File
+
+We will open / read our file with the following code: ` const contents = await fs.promises.readFile(this.filename, { encoding: 'utf8', });`
+
+It returns the contents of the file as a string, just like that!
+
+### Small Refactor
+
+We can shortern our `getAll()` method to:
+
+```
+  return JSON.parse(
+    await fs.promises.readFile(this.filename, {
+      encoding: 'utf8',
+    })
+  );
+```
+
+### Saving Records
