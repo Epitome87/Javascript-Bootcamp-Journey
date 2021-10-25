@@ -620,6 +620,8 @@ We can do the following to check if a file exists / create a new file if it does
 
 ### Opening the Repository Data File
 
+#### `Originally Started: 10/24/2021`
+
 We will open / read our file with the following code: ` const contents = await fs.promises.readFile(this.filename, { encoding: 'utf8', });`
 
 It returns the contents of the file as a string, just like that!
@@ -637,3 +639,379 @@ We can shortern our `getAll()` method to:
 ```
 
 ### Saving Records
+
+```
+async create(attributes) {
+  // Open / read our current contents of users data file.
+  const records = await this.getAll();
+
+  // Push this newly-created record into the file data
+  records.push(attributes);
+
+  // Write the updated "records" array back to this.filename.
+  await fs.promises.writeFile(this.filename, JSON.stringify(records));
+}
+```
+
+### Better JSON Formatting
+
+We can refactor the code above to wrap the last line in its own method, as we will be re-using it a lot:
+
+```
+async writeAll(records) {
+  await fs.promises.writeFile(
+    this.filename,
+    JSON.stringify(records, null, 2)
+  );
+}
+```
+
+Also note that we pass two additional arguments to JSON.stringify(). The second argument is a "replacer" -- a function that alters the behavior of the stringification process, or an array of String and Number that serve as an allowlist for selecting/filtering the properties of the value object to be included in the JSON string.
+
+The third argument is a "space" -- a String or Number object that's used to insert white space into the output JSON string for readability purposes. When we use a Number here, it indicates the number of space characters to use as white space for indenting purposes. So in our case, we will use two white spaces each indentation level.
+
+Now our JSON is much more readable!
+
+```
+// Using JSon.stringify(records);
+[ { "email": "test@test.com", "password": "password" },{"email": "test1@test.com","password": "password"} ]
+```
+
+```
+// Using JSON.stringify(records, null, 2);
+[
+  {
+    "email": "test@test.com",
+    "password": "password"
+  },
+  {
+    "email": "test1@test.com",
+    "password": "password"
+  }
+]
+```
+
+### Random ID Generation
+
+We need to assign unique IDs to each of our users, as to differentiate them. This is especially important in other types of records (like products), where it is entirely possible that two products have the same "name" property. We need a way to know which is which. This is where our `randomId()` function comes in!
+
+We will make use of Node's "Crypto" (Crytography) module. This module has tons of functions related for handling and ciphering and encrypting and decrypting data. We can make use of the `crypto.randomBytes()` method.
+
+```
+const crypto = require("crypto");
+
+// Make use of Node's Crypto module to generate a random ID (and string it to a hex value)
+randomId() {
+  return crypto.randomBytes(4).toString('hex');
+}
+
+// When assigning ID to a record:
+record.id = this.randomId();
+records.push(record);
+```
+
+### Finding By Id
+
+Now that we have Ids, we can create our User Repository methods that require an ID: getOne(id), delete(id), and update(id, attributes). We will create the `getOne(id)` method in this lecture.
+
+```
+async getOne(id) {
+  // Retrieve all records
+  const records = await this.getAll();
+
+  // Return the first record where its id is the target id.
+  return records.find((record) => record.id === id);
+}
+```
+
+### Deleting Records
+
+```
+async delete(id) {
+  // Retrieve all records
+  const records = await this.getAll();
+
+  // Only maintain records where the ID is not the target ID
+  const filteredRecords = records.filter((record) => record.id !== id);
+
+  // We now have an array with  only records that we DON'T want to delete
+  // We write only these back to the file -- essentially deleting the record with target id
+  await this.writeAll(filteredRecords);
+}
+
+// Make use of Node's Crypto module to generate a random ID (and string it to a hex value)
+randomId() {
+  return crypto.randomBytes(4).toString('hex');
+}
+```
+
+### Updating Records
+
+```
+async update(id, attributes) {
+  // Retrieve all records
+  const records = await this.getAll();
+
+  // Return the first record where its id is the target id
+  const recordToUpdate = records.find((record) => record.id === id);
+
+  if (!recordToUpdate) {
+    throw new Error(`Record with id ${id} was not found`);
+  }
+
+  // Simpler way to do the above: Takes all the props and key/value pairs in attributes
+  // and copies them one by one onto the recordToUpdate object
+  Object.assign(recordToUpdate, attributes);
+
+  // Write the records (now with the record with target ID updated) back to file
+  await this.writeAll(records);
+}
+```
+
+### Adding Filtering Logic
+
+Our `getOneBy()` method is the most complex -- so we saved it for last! The goal of this method is to call it with some filters object, and return the first user that matches those filters.
+
+```
+async getOneBy(filters) {
+  // Return if no filters provided
+  if (!filters) return;
+
+  // Retrieve all records
+  const records = await this.getAll();
+
+  // Iterate through each record in records array
+  for (let record of records) {
+    let found = true;
+
+    // Iterate through each key in filters object
+    for (let key in filters) {
+      if (record[key] !== filters[key]) {
+        found = false;
+        break; // No point looking through rest of filters -- move onto next record
+      }
+    }
+
+    if (found) return record;
+  }
+}
+```
+
+Our Users Repository is now done! We now have a useful set of methods that allow us to work with and manipulate a set of users.
+
+### Exporting an Instance
+
+We need to use our now-finished UsersRepository class in another file. What is the best way to export it?
+
+One approach would be:
+
+```
+module.exports = UsersRepository;
+
+// In another file...
+const UsersRepository = require("./users");
+const repo = new UsersRepository("users.json");
+repo.getAll();
+```
+
+But this doesn't seem very ideal. What if another file also requires UsersRepository, much like in the above code? And what if they typo the filename to "user.json" instead of "users.json". We now have two separate JSON files, and thus we are accidentally working with two data sets. This could be a challenging bug to track down.
+
+Instead, let's export an _instance_ of the class:
+
+```
+module.exports = new UsersRepository('users.json');
+
+// Another file...
+const repo = require(".users");
+repo.getAll();
+```
+
+However, note that this only works in our situation since we only ever really ever need one copy of UsersRepository. Since we hard-code the json filename in the file before exporting, this is not very flexible for re-use.
+
+### Signup Validation Logic
+
+Our signup logic (we move to next step if no error):
+
+1. Did another user already sign up with this email? -> Yes -> Show an error
+2. Are the password and password confirmation different? -> Yes -> Show an error
+3. Create an account for this user
+
+With this in mind, our new "POST" request looks like:
+
+```
+app.post('/', async (req, res) => {
+  const { email, password, passwordConfirmation } = req.body;
+
+  const existingUser = await usersRepo.getOneBy({ email });
+  if (existingUser)
+    return res.send('Email already in use');
+
+  if (password !== passwordConfirmation)
+    return res.send('Passwords do not match');
+
+  usersRepo.create({ email, password });
+
+  res.send('Post request received on home');
+});
+```
+
+#### `Originally Completed: 10/24/2021`
+
+## Section 28: Production-Grade Authentication
+
+#### `Originally Started: 10/22/2021`
+
+This section consists of 10 lectures, totally 78 minutes in length. In it, we will learn how to implement production-grade authentication in our e-commerce app!
+
+### Cookie-Based Authentication
+
+We will look at the vastly most popular way to handle authentication. To do so, we have to learn about request cookies.
+
+A cookie is a very small string of characters that the server wants the browser to store. It can serve them back in a response. It's as if the server is saying to the browser: "Here is a cookie! It's a small string of characters. Please include this with every followup request you make to me." The browser then automatically includes said cookies with the request that is being issued to the server. The cookie is the core of the vast majority of authentication, in order to identify users who are coming to our application to make requests.
+
+The cookie contains some form of identification in an encrypted format. The cookies are always unique for each domain; Google's will be different than one from Walmart, for example.
+
+### Creating User Records
+
+How can we interact with the user's cookie? We can figure out how to manipulate the user cookie ourselves using Express and the different APIs it offers us. Or we can use a third party package to manage Cookies for us. We will do the latter! Managing cookies is notoriously tricky, and easy to open us up for vulnerabilities. It's best left to utilize what trusted parties have created. So we will use the `cookie-session` library: `npm install cookie-session`
+
+### Fetching a Session
+
+The cookie-session library is a middleware function, just like body-parser. We have to write it up to our express app, via app.use().
+
+```
+app.use(
+  cookieSession({
+    keys: ['euab74n39bnopqldkew83blaejyvctq7adjlke3'],
+  })
+);
+```
+
+Note the keys property: It is used to encrypt all the information that is stored in the Cookie. This will help prevent the user from modifying the cookie to pretend they are somewhere they are not.
+
+The cookie-session library adds exactly one property to our Express app, on the request object: `req.session`. It is a plain Javascript object, and we can add as many properties as we wish to the session object. Any information we throw in there will automatically be mantained by cookie-session for us.
+
+Now we can do:
+
+```
+// Store the id of that user inside the user's cookie req.session.userId = user.id;
+```
+
+### Signing Out a User
+
+To sign out, we simply indicate we wish to forget our current Session object.
+
+```
+app.get('/signout', (req, res) => {
+// Forget the current session object. Cookie-Session will handle the rest!
+req.session = null;
+
+res.redirect('/');
+});
+```
+
+### Signing In
+
+Flow-chart for signing a user in:
+
+1. Did another user already sign up with this email? -> No -> Show an error
+2. Does the existing user record have the same password as the one supplied? -> No -> Show an error
+3. Sign this user in!
+
+```
+app.post('/signin', async (req, res) => {
+  const { email, password } = req.body;
+
+  const user = await usersRepo.getOneBy({ email });
+
+  // Does a user with this email even exist?
+  if (!user) {
+    return res.send('Email not found');
+  }
+
+  // Does the password provided match that of the user's?
+  if (user.password !== password) {
+    return res.send('Invalid password');
+  }
+
+  // At this point, user is valid: Sign in!
+  req.session.userId = user.id;
+
+  res.send('You are signed in!');
+});
+```
+
+### Hashing Passwords
+
+There's a very big security issue with our current solution: Our data store (users.json) are storing the actual user passwords -- in plain text! If a malicious user ever got access to this file, they'd know every user's email and password. Even if our web app provides a malicious user with no direct benefit of knowing other users' login information (he can't sign into their account and actually buy anything with their money, for example) it poses an indirect risk: Many people re-use their passwords for multiple things! So if someone finds your password in one location, they may take advantage of it on a website that permits it -- even a banking site!
+
+**Never store passwords in plain text!**
+
+We need to use a hashing algorithm. The goal of a hash algorithm is to take a string and spit out a seemingly-random series of numbers and letters. Hash algorithms have a very important property: The same input string always provides the same output. SHA256 is the name of one popular hashing algorithm. Hashing algorithms do not work in reverse. Changing even just one input character changes the hash output significantally.
+
+What we store in our database is the hashed version of the user's password. When he signs up and signs in, we run their input password through our hashing algorithm. We check to see if the hash version matches the hash that was previously saved to the database (as the user's hashed password).
+
+However, there's still one security hole with this method...
+
+### Salting Passwords
+
+The security hole with hash algorithms has to do with taking advantage of known common passwords. This leads to a "Rainbow Table Attack".
+A malicious user can find a list of common passwords and build up a look-up table of their corresponding hash values. For example, they'll know common password "monkey" has a SHA256 hash of "000c285457fc9". Now, if a malicious user gains access to our users.json file, they'll see all the hash values, and compare them to their tables. If they find "000c285457fc9" in our data store, they know that non-hashed password is "monkey"! They can now sign into their account. This type of attack is not as succesful if your password is truly complex and unique.
+
+To prevent this, we add an additional random string of characters to every password we hash, called a "Salt". This "Salt" is different for every user. The "Salt" is appended to the un-hashed password, and that combined input is ran through the hashing algorithm.
+
+To achieve this, we store the following in our Users database, in place of their direct password: "<HashedPassword+RandomSalt.RandomSalt>"
+Later, when the user signs in using their password, we retrieve the "RandomSalt" portion of their stored password, append that to the password they just input, run it through the hashing algorithm, and see if it matches the "HashedPassword+RandomSalt" portion of the stored password.
+
+### Salting + Hashing Passwords
+
+The Node.JS standard library's "Crypto" module will help us achieve our salting and hashing.
+
+`crypto.randomBytes()` to generate our random Salt
+
+`crypto.scrypt(password, salt, keylength[,options],callback)` (named after a specific password hashing algorithm) to hash our password.
+
+```
+// Inside our user repository create() method:
+// Generate a random salt
+const salt = crypto.randomBytes(8).toString('hex');
+const buffer = await scrypt(attributes.password, salt, 64);
+// Push this new record, but change its password to be the hashed version
+const record = {
+  ...attributes,
+  password: `${buffer.toString('hex')}.${salt}`,
+};
+records.push(record);
+
+```
+
+### Comparing Hashed Passwords
+
+```
+ async comparePasswords(savedPassword, suppliedPassword) {
+// savedPassw=rd -> password saved in our database: "hashed.salt"
+// suppliedPassword -> password given to us by a user trying to sign in
+const [hashed, salt] = savedPassword.split('.');
+const hashedSupplied = await scrypt(suppliedPassword, salt, 64);
+return hashed === hashedSupplied;
+  }
+```
+
+### Testing the Full Flow
+
+In our "GET" route for the "signin" route, we update our password check with the following:
+
+```
+/*No Longer Use This!*/ // if (user.password !== password) {
+const isValidPassword = await usersRepo.comparePasswords(
+  user.password,
+  password
+);
+if (!isValidPassword) return res.send('Invalid password');
+```
+
+And that's basic user authentication, using basically only cookie-session!
+
+In the next section, we will refactor the code and better structure the project. We will then have a good solid starting point for any app in the future we want to create that requires authentication.
+
+#### `Originally Started: 10/24/2021`
