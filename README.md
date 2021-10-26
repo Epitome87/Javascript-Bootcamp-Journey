@@ -1014,4 +1014,335 @@ And that's basic user authentication, using basically only cookie-session!
 
 In the next section, we will refactor the code and better structure the project. We will then have a good solid starting point for any app in the future we want to create that requires authentication.
 
-#### `Originally Started: 10/24/2021`
+#### `Originally Completed: 10/24/2021`
+
+## Section 29: Strcuturing Javascript Projects
+
+#### `Originally Started: 10/25/2021`
+
+We'll have 3 primary directories in our project:
+
+- Routes
+  - admin/auth.js
+  - admin/products.js
+  - products.js
+  - cart.js
+- Repositories
+  - users.js
+  - products.js
+- Views
+  - Various
+
+### Structure Refactor
+
+We can move all our routes related to authentication into its own auth.js file. To define routes here, we require express, and then: `const router = express.Router();` as well as calling our `app.get()` and `app.post()` methods with `router.get()` and `router.post()` instead. We then `module.exports = router;` and inside our index.js file we have:
+
+```
+const authRouter = require('./routes/admin/auth');
+const app = express();
+
+// ...After other Middlewares
+app.use(authRouter);
+```
+
+This is essentially a convention to create "Sub" routers in other files, and hook them up as middelware to our express app.
+
+### HTML Templating Functions
+
+We also should clean up our HTML-related code, putting it into appropriate files in a "Views" directory. Each file is responsible for returning one snippet of HTML.
+
+In Express, there are many ways to generate HTML, using HTML Templating Libraries:
+
+- pug/jade
+- haml
+- mustache
+- EJS
+
+Rather than learn the syntax of a templating library, we are going to export a function that returns a string representation of the HTML.
+
+Although I know EJS from other projects, I think I will follow this course's approach, as it might be a useful option to learn!
+
+Example of this strategy:
+
+```
+// views/admin/auth/signup.js
+module.exports = ({request}) => {
+  return `
+    <div>
+        ${request.session.userId}
+        <form method="POST">
+            <input name="email" placeholder="email" />
+            <input name="password" placeholder="password" />
+            <input name="passwordConfirmation" placeholder="password confirmation" />
+            <button>Sign Up</button>
+        </form>
+    </div>
+    `;
+};
+
+// auth.js
+const signupTemplate = require('../../views/admin/auth/signup');
+
+router.get('/signup', (request, response) => {
+  response.send(signupTemplate({ request }));
+});
+
+```
+
+### HTML Reuse with Layouts
+
+Things we could improve so far:
+
+The response we send to our browser from our server right now is just a single div element with all the HTML form data we need to show to the user. Yet the browser somehow manages to wrap that up in the appropriate HTML, head, body, etc tags. How is this? Well, it recognizes we are sending a _partial_ HTML document. The browser will automatically create these elements for us, and stick our content in the body. While this sounds good, we should not rely on the browser to do this for us! So we should send down an entire valid HTML document. But doing so in each file would be tedious, not be DRY, and would be hard to expand upon any time we want to introduce a change that might effect every page.
+
+To solve this, we can create a _layout_ file. It will contain all the standard HTML elements we expect to have inside our document. We display the layout, and stick the contents of our different view templates inside the body of the layout file.
+
+### Building a Layout File
+
+```
+// views/admin/layout.js
+module.exports = ({ content }) => {
+  return `
+        <!DOCTYPE html>
+        <html>
+            <head>
+            </head>
+            <body>
+                ${content}
+            </body>
+        </html>
+    `;
+};
+
+// views/admin/auth/signin.js
+const layout = require('../layout');
+module.exports = () => {
+  const content = `
+    <div>
+        <form method='POST'>
+            <input name='email' placeholder='email' />
+            <input name='password' placeholder='password' />
+            <button>Sign In</button>
+        </form>
+    </div>
+    `;
+
+  return layout({ content });
+};
+```
+
+### Adding Better Form Validation
+
+We will use a library called `express-validator` to help us validate our forms.
+
+### Validation vs Sanitization
+
+Validation makes sure the incoming form values meet some criteria.
+Sanitization has to goal of massaging the incoming form values. For example, trimming white space from an incoming value.  
+We can also standardize an incoming email via sanitization.
+
+### Receiving Validation Output
+
+We can use the `express-validator` library as follows:
+
+```
+router.post(
+  '/signup',
+  [
+    check('email').trim().normalizeEmail().isEmail(),
+    check('password').trim().isLength({ min: 5, max: 20 }),
+    check('passwordConfirmation').trim().isLength({ min: 5, max: 20 }),
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+  // ... etc
+```
+
+### Adding Custom Validators
+
+Right now, we are validating user input in two different spots -- once in the `express-validator` middleware, and then once again shortly after when we do our own check that ensures the email is not already in use by another user, or when the password and confirmation password fields are not the same value. This is not good practice! We want to merge / centralize our validation logic into one check. We need a custom validator to add to the `express-validator` validation chain.
+
+```
+[
+  check('email')
+    .trim()
+    .normalizeEmail()
+    .isEmail()
+    .custom(async (email) => {
+      const existingUser = await usersRepo.getOneBy({ email });
+      if (existingUser) throw new Error('Email already in use');
+    }),
+  check('password').trim().isLength({ min: 5, max: 20 }).withMessage('Password must be between 5 and 20 characters'),
+  check('passwordConfirmation')
+    .trim()
+    .isLength({ min: 5, max: 20 }).withMessage('Password must be between 5 and 20 characters')
+    .custom(async(passwordConfirmation, { req }) => {
+      if (req.body.password !== passwordConfirmation)
+        throw new Error('Passwords do not match');
+    }),
+],
+```
+
+### Extracting Validation Chains
+
+We need to pull out all the validation logic out of our auth.js file.
+We also need to figure out how to show the form validation errors on the original form, so the user knows what they did wrong without being taken to a seperate page that tells them so.
+
+We can create a `routes/admin/validators.js` file and do the following:
+
+```
+module.exports = {
+  requireEmail: check('email')
+    .trim()
+    .normalizeEmail()
+    .isEmail()
+    .custom(async (email) => {
+      const existingUser = await usersRepo.getOneBy({ email });
+      if (existingUser) throw new Error('Email already in use');
+    }), // etc for the other 2 validators
+```
+
+And now in our auth.js file:
+
+```
+router.post(
+  '/signup',
+  [requireEmail, requirePassword, requirePasswordConfirmation],
+  async (req, res) => {
+    const errors = validationResult(req);
+```
+
+Much cleaner!
+
+### Displaying Error Messages
+
+Now we actually need to handle user's entering invalid form data, not just detect it!
+
+First, we create a helper function that will return the error messages:
+
+```
+function getError(errors, property) {
+  try {
+    return errors.mapped()[property].msg;
+  } catch (err) return '';
+```
+
+Now in our HTML for the signup page, we can do:
+
+```
+<form method="POST">
+  <input name="email" placeholder="email" />
+  ${getError(errors, 'email')}
+  <input name="password" placeholder="password" />
+  ${getError(errors, 'password')}
+  <input name="passwordConfirmation" placeholder="password confirmation" />
+  ${getError(errors, 'passwordConfirmation')}
+  <button>Sign Up</button>
+</form>
+```
+
+### Validation Around Sign In
+
+Validating Sign-In is very similar to that of Sign-Up
+
+### Password Validation
+
+Again, creating our validators for Sign-In is similar to that above.
+
+### Template Helper Functions
+
+We'll put our `getError()` function into its own file, and require it in the signup and signin templates. Nothing really to write about!
+
+### Adding Some Styling
+
+We will use Bulma and style the pages a little better (or at least Stephen will for us!)
+
+But now we have a problem: We want to use a stylesheet for additional styling. But how can we get access to it in Express? We can't simply place it where are index.js file is and have it work...
+
+### Exposing Public Directories
+
+Much like we're doing with our signin and signup, where our browser makes a request for a route on our Express server and our route handler processes it and returns some HTML back, we need to do the same with our CSS file(s). We need to setup a very different type of route handler, where we want Express to try to find a file (called main.css) and send that file back to the browser. We want Express to serve up some file, in order to make it available for our application in the browser.
+
+To do so, we make a "public" directory: We're going to expose this directory to the outside world, so a browser can freely access it. We place any CSS files, any fonts, any images, any Javascript code (that we want to make available to browser). Never place secret/important files in there! Always hide server code from browser.
+
+But there's still another step: We need to tell Expess explicitely that we want to make this directory available to the outside world.
+`app.use(express.static('public'));`
+
+The line above changes how Express handles every single request we get. Now Express first looks at the incoming request and looks to see if there's a file in the "public" directory that the request is looking for. If there is, it sends that file back. If not, it continues on and runs all the other Middleware and route handlers that we've set up.
+
+### Next Steps
+
+We're now essentially done with authentication! We can now get back on-track to the e-commerce functionality. Most of what we need to know has been learned -- now we can focus on just typing!
+
+Next up is finishing the Admin Panel.
+
+### Product Routes
+
+Much like we did when we refactored our routes from index.js to auth.js, we need to create a Router object, define some of its routes, and then export that to our index.js. We then use it as a middeleware. Not much new from before. We will define these routes in "products.js" and export them in "index.js"
+
+```
+// index.js
+const productsRouter = require('./routes/admin/products');
+...
+app.use(productsRouter);
+```
+
+### The Products Repository
+
+Like with Users, we need a Products Repository. It will have extremely similar functionality and methods. Only the "create" method will be different, in fact! Rather than simply copy and paste the UsersRepository code, we will create a parent class called "repository", and have them extended to a "users" and "products" version! This will let us define a "Create" method in the parent, and then have each of the children define how it functions, since they will be unique to each one.
+
+### Code Reuse with Classes
+
+We create a class "Repository" and basically copy and paste what is in our "users.js" (UsersRepository) class. We then have the now-trimmed UsersRepository class "extend" the base Repository class.
+
+### Creating the Products Repository
+
+Now we create the ProductsRepository class. It "extends" the base Repository class, and adds literally nothing new (yet). We then export it to our "products.js" file, so those routes can have access to the Products Repository!
+
+### Building the Product Creation Form
+
+Another simple lecture.
+
+```
+// newProduct.js
+const layout = require('../layout');
+const { getError } = require('../../helpers');
+
+module.exports = ({ errors }) => {
+const content = `
+  <form method="POST">
+      <input placeholder="Title" name="title" />
+      <input placeholder="Price" name="price" />
+      <input type="file" name="image" />
+      <button>Submit</button>
+  </form>
+`;
+
+return layout({ content });
+};
+
+```
+
+### Some Quick Validation
+
+We must note that when we submit a form, no matter what we type in, our server is always going to receive that value as a string. Therefore, when validating our product price input, we want to chain on `.toFloat()` to our validation chain on the price.
+
+```
+// validators.js
+requireProductTitle: check('title')
+  .trim()
+  .isLength({ min: 5, max: 40 })
+  .withMessage('Product title must be between 5 and 40 characters'),
+
+requireProductPrice: check('price')
+  .trim()
+  .toFloat()
+  .isFloat({ min: 1 })
+  .withMessage('Please enter a valid price'),
+```
+
+#### `Originally Completed: 10/25/2021`
+
+## Section 30: Image and File Upload
+
+This section continues right off from the last lecture, where we are working on finishing our Admin Panel's ablity to add new products.
