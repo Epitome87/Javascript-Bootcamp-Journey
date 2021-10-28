@@ -1,7 +1,7 @@
 const layout = require('../layout');
 const { getError } = require('../../helpers');
 
-module.exports = ({ req, errors }) => {
+module.exports = ({ errors }) => {
   return layout({
     content: `
       <div class="container">
@@ -33,6 +33,6 @@ module.exports = ({ req, errors }) => {
           </div>
         </div>
       </div>
-    `
+    `,
   });
 };

@@ -48,6 +48,7 @@ module.exports = {
       if (!isValidPassword) throw new Error('Invalid password');
     }),
 
+  // Admin Product-Related Validators
   requireProductTitle: check('title')
     .trim()
     .isLength({ min: 5, max: 40 })
@@ -57,5 +58,5 @@ module.exports = {
     .trim()
     .toFloat()
     .isFloat({ min: 1 })
-    .withMessage('Please enter a valid price'),
+    .withMessage('Price must be a number greater than 1'),
 };

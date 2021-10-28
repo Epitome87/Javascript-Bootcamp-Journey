@@ -1346,3 +1346,251 @@ requireProductPrice: check('price')
 ## Section 30: Image and File Upload
 
 This section continues right off from the last lecture, where we are working on finishing our Admin Panel's ablity to add new products.
+
+#### `Originally Started: 10/28/2021`
+
+### Exploring Image Upload
+
+When we submit our product form with the title, price, and uploaded image, we can see in the `req.body` that the only information we have about our attached file is the image name. This is not very useful! How can we take a file that's been submitted via a form and actually receive it on our backend server?
+
+### Understanding Multi-Part Forms
+
+When we leave a form to its default behavior, its `method` attribute is automatically set to "GET" behind-the-scenes. With a method of "GET", the browser is going to take all of the information in the form, add it into the URL of the request, and make a request to the backend server with that URL.
+
+When we specify a method of "POST", the browser is going to take all of the information of the form, stick it into the body of a POST request, and make that request to the backend server.
+
+There is another option we can provide to a form element: `enctype= `
+
+- This stands for encoding type
+- Method describes **how** to transmit information
+- enctype describes **how to take** information out of the form and get it ready to be transmitted. How to encode/bundle the information to make it safe and transport in some style.
+- By default this is `enctype="application/x-www-form-urlencoded"` if we do not provide it
+  - This type of encoding (urlencoded) is saying: "Take all the info out of the form (inputs) take a look at their "name" properties, take a look at the values of each, and put them all together in a query string type format. Take this information, make it safe to be transmitted inside of a URL.
+
+Core issue around using the defaults with file input types
+
+- Files might have some data inside of it which can not be safely or efficiently trasmitted into a URL-safe format
+- Form has no idea how to turn that file into a URL-safe string, so just transmits the name of the file
+
+We need another encoding type to resolve this; `enctype="multipart/form-data"`
+
+- This means take all the differente pieces of info out of our form, and for each separate input, send each little part to the backend in a different little part.
+
+### Accessing the Uploaded File
+
+The body-parse middleware we're using right now is not sufficient to reach into the request and pull out the image we are uploading -- it only works with urlencoded requests.
+
+Instead, we will use the `multer` npm library to do multipart/form-data parsing!
+
+```
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage() });
+
+// In our POST route for new products
+router.post(
+  '/admin/products/new',
+  [requireProductTitle, requireProductPrice],
+  upload.single('image'),
+  (req, res) => {
+    const errors = validationResult(req);
+
+    console.log(req.file);
+
+    res.send('Submitted');
+  }
+);
+```
+
+### [Optional] Different Methods of Image Storage
+
+Skipping for now
+
+### Saving the Image
+
+We are going to handle image saving in a way that is **NOT** the best or most optimal way -- but it works for teaching purposes. This way is not recommended for a production-level application.
+
+We are going to take the file that is uploaded and turn it into a string that can be safely stored inside the products.json file. We then take that string and create a new record out of it using our products repo, which in turn will save it into products.json.
+
+```
+const image = req.file.buffer.toString('base64');
+const { title, price } = req.body;
+
+const newProduct = await productsRepository.create({ image, title, price });
+```
+
+Looks like it works! But there's one small bug...
+
+### A Subtle Middleware Bug
+
+(Should revisit this video for better explanation)
+
+Although it looks like a new product is being created and saved to our json file based off the correct user input in the new product form fields, that is not the case. Not especially how our "price" is saved as a string, whereas it should be a number.
+
+Basically, since the body-parser middleware is not handling the new products form, it is no longer running for our incoming request. It no longer parses the contents of the post request and throwing it into `req.body`. Yet we still can receive our title and price and image in `req.body` -- how? Because multer! It's parsing "title" and "price" for us. The problem is the order in which our validators and multer middeleware are running! When we were having our body parsed with body-parser, we were "using" that middleware before our validators were called (via `app.use(bodyParser())`) -- this makes it called before every individual route middleware we specify in the route itself. As far as our validators are concerned, no "price" or "title" were provided, so the validation fails.
+
+The fix is simple: Swap validators and multer!
+
+```
+router.post(
+  '/admin/products/new',
+  upload.single('image'), // Put this first!
+  [requireProductTitle, requireProductPrice],
+  async (req, res) => {
+```
+
+### Better Styling
+
+In this lecture, we just add some styling (by copying and pasted updated "new.js" file) to make our new product form page look better.
+
+### Reusable Error Handling Middleware
+
+Let's create our own middleware function for error handling of our validators! We create a middlewares.js file in our routes/admin directory:
+
+```
+const { validationResult } = require('express-validator');
+
+module.exports = {
+  handleErrors(templateFunction) {
+    return (req, res, next) => {
+      const errors = validationResult(req);
+
+      if (!errors.isEmpty()) {
+        return res.send(templateFunction({ errors }));
+      }
+
+      next();
+    };
+  },
+};
+
+// Use where necessary, like in auth.js signin route:
+router.post(
+  '/signin',
+  [requireEmailExists, requireValidPasswordForUser],
+  handleErrors(signinTemplate),
+  async (req, res) => {
+```
+
+### Products Listing
+
+To display our products, we listen for a "GET" request on the "admin/products" route, we retrieve all the products from the products database,
+
+```
+// views/admin/products/index.js
+const layout = require('../layout');
+
+module.exports = ({ products }) => {
+  const renderedProducts = products
+    .map((product) => {
+      return `
+            <div>${product.title}</div>
+        `;
+    })
+    .join('');
+
+  const content = `
+    <h1 class="title">Products<h1>
+    ${renderedProducts}
+  `;
+
+  return layout({ content });
+};
+
+// products.js
+router.get('/admin/products', async (req, res) => {
+  const products = await productsRepository.getAll();
+  res.send(productsIndexTemplate({ products }));
+});
+```
+
+### Redirect on Success Actions
+
+Whenever an admin user Signs up, Signs in, creates a product, or edits a product, we want to redirect them to the Product Index page. In an Express app, we do this with a `res.redirect("/admin/products)` call!
+
+### Requiring Authentication
+
+We need to make sure we add some code in our admin routes to make sure a user is signed into our application before they can see the content of the pages!
+
+We need to check if the `req.session.userId` property is defined before we allow admin access to these routes!
+
+```
+if (!req.session.userId) {
+  return res.redirect("/signin");
+}
+```
+
+This introduces duplicate code, so we can wrap this inside a function into our middlewares.js file!
+
+```
+// middlewares.js
+requireAuthentication(req, res, next) {
+  if (!req.session.userId) {
+    return res.redirect('/signin');
+  }
+
+  next();
+},
+
+// products.js
+router.get('/admin/products/new', requireAuthentication, (req, res) => {
+  res.send(productsNewTemplate({}));
+});
+```
+
+### Template Update
+
+In this lecture, we do some styling (provided for us) to the admin/products page. It now includes buttons for Edit / Delete of a product, and a button to create a New Product.
+
+So how can we click the Edit / Delete button by a product and do the required logic on that particular product?
+
+### Ids in URLs
+
+The best way to handle Edit functionality is to somehow encode into our button the Id of the product we wish to edit (href):
+
+```
+<a href="/admin/products/${product.id}/edit">
+  <button class="button is-link">
+    Edit
+  </button>
+</a>
+```
+
+Now we need to put together a route handler that can receive these requests!
+
+### Receiving URL Params
+
+We can have a "Wildcard" in the URL by putting ":" , as in: `router.get("/admin/products/:id/edit", (req, res))`
+
+```
+router.get('/admin/products/:id/edit', async (req, res) => {
+  const productId = req.params.id;
+  const productToEdit = await productsRepository.getOne(productId);
+
+  if (!productToEdit) {
+    return res.send('Product with that ID not found');
+  }
+
+  res.send(productsEditTemplate({ product: productToEdit }));
+});
+```
+
+### Displaying an Edit Form
+
+```
+const layout = require('../layout');
+
+module.exports = ({ product }) => {
+  const content = `
+    <form method="POST">
+        <input name="title" value="${product.title}" />
+        <input name="price" value="${product.price}" />
+        <input name="image" type="file" />
+        <button>Submit</button>
+    </form>
+  `;
+
+  return layout({ content });
+};
+```
+
+As there's no easy way (with our implementation of file attachments) to pre-populate the edit form with the image that's already associated with the product being edited, we will just assume that if the user does not attach a new file, they want to keep the old image.
