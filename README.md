@@ -1594,3 +1594,387 @@ module.exports = ({ product }) => {
 ```
 
 As there's no easy way (with our implementation of file attachments) to pre-populate the edit form with the image that's already associated with the product being edited, we will just assume that if the user does not attach a new file, they want to keep the old image.
+
+## Section 31: Building a Shopping Cart
+
+#### `Originally Started: 10/28/2021`
+
+This section contains 20 lectures, spanning 1 hour and 53 minutes of content.
+In this section we will finish the Admin Panel and work on the User's Shopping Cart!
+
+### Editing a Product
+
+```
+router.post(
+  '/admin/products/:id/edit',
+  requireAuthentication,
+  upload.single('image'),
+  [requireProductTitle, requireProductPrice],
+  handleErrors(productsEditTemplate),
+  async (req, res) => {
+    const productEdits = req.body;
+
+    if (req.file) productEdits.image = req.file.buffer.toString('base64');
+
+    try {
+      await productsRepository.update(req.params.id, productEdits);
+    } catch (error) {
+      return res.send('Could not find item');
+    }
+
+    res.redirect('/admin/products');
+  }
+);
+```
+
+However, error handling does not work properly! Our middleware for handleErrors is not passing the product we care about.
+
+### Fixing the HandleErrors Middleware
+
+Problem: Our HandleErrors middleware is calling the product edit template with just an errors object, but our product edit wants a "product" object. So whenever we have an error, we call the template with no product argument -- so the product is undefined, and thus all the references in our product edit page are not defined.
+
+### Edit Form Template
+
+### Edit Form Template
+
+Simply added styling to our product edit page.
+
+### Deleting Products
+
+To delete a product, we can wrap our Delete button in a form element. Why not wrap it in an anchor tag like with our Edit button? Because an anchor tag will send a "GET" request -- but we want a "POST" request! A form only allows "GET" and "POST" request, although technically using a "DELETE" request here would be more appropriate. But getting a "DELETE" request in a form involves a bit of trickery, so we avoid that in this project.
+
+So, we wrap the Delete button in a form, give it a `method="POST"` and an `action="/admin/products/${product.id}/delete"` as the URL its making the POST request to. By default the action property is the current URL (/admin/products in our case).
+
+```
+// In /views/admin/products/index.js
+<form method="POST" action="/admin/products/${product.id}/delete">
+    <button class="button is-danger">Delete</button>
+</form>
+```
+
+### Starting with Seed Data
+
+We are all done with our Admin Panel! Now we need the ability to show the user a list of products, which they can click and add to their cart. They should also be able to view the content of their cart.
+
+Because we need a good list of options for products for the user, we need to fill our database with products. Stephen provides us with a new products.json file with a handful of products with reasonable titles, prices, and images.
+
+### User-Facing Products
+
+#### `Originally Continued: 10/29/2021`
+
+In this lecture, we create a "routes/products.js" file to handle user product routes. We set up the home ("/") route to simply send a welcome message. Finally, we use the router we create in the products.js file via `app.use(productsRouter);` in the index.js file. Nothing new, really!
+
+### Products Index
+
+```
+// In views/products/index.js
+module.exports = ({ products }) => {
+  const renderedProducts = products
+    .map((product) => {
+      return `
+            <li>${product.title} - $${product.price}</li>
+        `;
+    })
+    .join('');
+
+  return `
+        <ul>${renderedProducts}</ul>
+    `;
+};
+```
+
+```
+// routes/products.js
+const express = require('express');
+const productsRepository = require('../repositories/products');
+const productsIndexTemplate = require('../views/products/index');
+
+const router = express.Router();
+
+router.get('/', async (req, res) => {
+  const products = await productsRepository.getAll();
+
+  res.send(productsIndexTemplate({ products }));
+});
+
+module.exports = router;
+```
+
+### Merging More Styling
+
+Simply copy and pasted some styling changes to our user product index page. It's now resembling an actual online store!
+
+### Understanding a Shopping Cart
+
+Like Amazon does, we want a user to be able to put items in their Shopping Cart without ever having to actually sign in. But this leads us to two big problems:
+
+1. How do we tie a Cart to a person who will never be logged in?
+2. Even if we can identify who is trying to add an item to a cart, how do we tie a product to a Cart?
+
+### Solving Problem #1
+
+So how do we tie a Cart to a person when they will never be logged in?
+
+When the user adds a product to the Cart, the Express server will respond by essentially saying: "Product with <productId> added to Cart. By the way, please store Cart ID #<randomIdNumber> in your Cookie, so I know which Cart is yours!"
+
+Every follow-up request will allow us to know which Cart ID is attached to that person.
+
+### Solving Problem #2
+
+Now how do we represent a Cart? Here we observe 3 different approaches (with the first 2 being _bad_!)
+
+1. We could add a "carts" key in our Products Repository, which is an array that stores the Cart ID of every Cart that item is associated with.
+
+- Downside: Any time we want to ask about what products being to what users, we have to iterate through our entire list of products (in order to see if their Cart ID is found in the "Carts" key).
+- We are also mixing functionality: A Product shouldn't know about Carts.
+- The "Carts" array might grow without bound, as many users add that Product to their Cart and never remove it. (Though we could figure out when to remove it automatically after some time)
+
+2. We could have a separate repository, called the Carts Repository. Inside of here, we can store an array of objects, where each object represents one user's Cart. It could store the ID of the Cart, and a Products array (where each item contains that product's ID, title, price, image, etc).
+
+- Downside: We're making a copy of the entire Product definition and storing it inside the Cart definition. If we ever update information of a Product (say price), the Product price in the Cart Repository now contains out-of-date information. To update, every time we made a change to a product, we'd have to look through all the Carts we have, all the different products that they store, and update the appropriate properties on each one. Very expensive operation!
+
+3. Much like possibility #2, we have a Products Repo and Carts Repo. Every time the user attempts to add a product to a cart, if they don't have a cart already we generate one for them (create new record in Carts repo for them, with random cart Id and a products array). This time, instead of storing entire product in products array, we only store the ID of the product, and the quantity! If we ever wanted to figure out the different products the user has in their cart, we'd simply take the product IDs and look it up in the Products Repo!
+
+- Good: Easily make updates to original Products Repo (title, price, image) without having to go through the Carts
+- Downside: More complex code.
+
+We will go with solution #3!
+
+### Shopping Cart Biolerplate
+
+We create a new file for our carts repo (carts.js) in repositories directory:
+
+```
+const Repository = require('./repository');
+class CartsRepository extends Repository {}
+module.exports = new CartsRepository('carts.json');
+```
+
+We will create a router for the Cart in routes/carts.js
+
+```
+const express = require('express');
+const router = express.Router();
+
+// We'll define routes later
+
+module.exports = router;
+```
+
+And in our index.js file, we `const cartsRouter = require('./routes/carts');` and `app.use(cartsRouter);`
+
+3 different routes we need for shopping cart:
+
+1. Button (Add to Cart) that triggers a POST form request. Attempt to add that item to a Cart.
+2. A route that displays the actual Shopping Cart content (list of items in it, their price, quantity, etc).
+3. A route that handles pressing the "X" (Delete) buttons by each product on the page mentioned above. This is done via a form submittion.
+4. (Technically a route for when the "Buy" / "Checkout" button is clicked, but we don't implement purchasing)
+
+### Submission Options
+
+How can we signal which product we are adding to the cart?
+
+1. One approach is how we did earlier: We have the form wrapping the button send a POST request, with an "action" of "/cart/products/${product.id}"
+
+2. The other way is to add an input element in the form itself, but have it hidden so it is not visible to the user. We could set the "value" of this element to `value="${product.id}"`. Now when a user submits the form, we can read in `req.body` from our POST request handler and get the information stored inside that input!
+
+For variety sake, we will try approach #2:
+
+```
+// views/products/index.js
+<form action="/cart/products/" method="POST">
+    <input hidden value="${product.id}" name="productId"/>
+    <button class="button has-icon is-inverted">
+      <i class="fa fa-shopping-cart"></i> Add to cart
+    </button>
+  </form>
+```
+
+And in our routes/carts.js:
+
+```
+// Receive a POST request to add an item to a cart
+router.post('/cart/products', async (req, res) => {
+  const { productId } = req.body;
+  // Cart-related logic to come...
+  res.send(`Adding ${productId} to your cart`);
+});
+```
+
+### Creating a Cart, One Way or Another
+
+To create our Cart functionality, we unfortunately have several corner cases to consider.
+
+1. A user comes to our app for the first time and clicks on Add Product. In this case, there is no Cart in our Carts Repo that corresponds to that of this user. So we'll need to ensure we create that Cart.
+2. A user has come to our app and added a product before, we assign them a cart ID and store it inside a cookie. We have to go through the Carts Repo and find the appropriate cart for them.
+3. After we find the cart of either of the 2 previous user scenarios, we then have to decide whether or not there's already a product in that cart's product array that already contains that product ID.
+4. There are no items yet, we have to take the product ID and add it in fresh to the product array.
+
+```
+// Receive a POST request to add an item to a cart
+router.post('/cart/products', async (req, res) => {
+  const { productId } = req.body;
+
+  // Figure out the Cart! (Make one? Retrieve one?)
+  let cart = undefined;
+
+  if (!req.session.cartId) {
+    // We don't have a Cart; need to create one!
+    // And store the Cart ID on the req.session.cartId property
+    cart = await cartsRepository.create({ items: [] });
+
+    // Assign our Cart session with this newly-created Cart's id.
+    req.session.cartId = cart.id;
+  } else {
+    // We have a Cart; let's get it from the Carts Repo!
+    cart = await cartsRepository.getOne(req.session.cartId);
+  }
+
+  // Either increment quantity for existing product
+  // OR add new Product to the product array
+  let isItemUnique = true;
+
+  cart.items.forEach((item) => {
+    if (item.id === productId) {
+      console.log('Item already in cart; incrementing quantity!');
+      isItemUnique = false;
+      item.quantity++;
+    }
+  });
+
+  if (isItemUnique) {
+    // Item wasn't already found in cart
+    console.log('Item not in cart; adding!');
+    cart.items.push({ id: productId, quantity: 1 });
+  }
+
+  // Update the Carts repository with its new items state
+  cartsRepository.update(cart.id, { items: cart.items });
+
+  console.log(cart);
+  res.send(`Adding ${productId} to your cart`);
+});
+```
+
+### Adding Items to a Cart
+
+```
+// Slightly cleaner way rather than using isItemUniqe flag
+const existingItem = cart.items.find((item) => {
+  return item.id === productId;
+});
+
+if (existingItem) {
+  existingItem.quantity++;
+} else {
+  cart.items.push({ id: productId, quantity: 1 });
+}
+```
+
+### Displaying Cart Items
+
+```
+// In views/carts/show.js
+const layout = require('../layout');
+
+module.exports = ({ items }) => {
+  const renderedItems = items
+    .map((item) => {
+      return `
+            <div>
+                ${item.product.title} - $${item.product.price}
+            </div>
+
+        `;
+    })
+    .join('');
+
+  const content = `
+    <h1>Cart</h1>
+    ${renderedItems}
+  `;
+
+  return layout({ content });
+};
+```
+
+```
+// In routes/cart.js
+const cartShowTemplate = require('../views/carts/show');
+
+// Receive a GET request to show all items in cart
+router.get('/cart', async (req, res) => {
+  // Redirect if user does not have a Cart
+  if (!req.session.cartId) {
+    return res.redirect('/');
+  }
+
+  const cart = await cartsRepository.getOne(req.session.cartId);
+  for (let item of cart.items) {
+    const product = await productsRepository.getOne(item.id);
+    // Just attach a new key onto our cart item (we won't be saving it back to the database)
+    item.product = product;
+  }
+
+  console.log('cart.items', cart.items);
+
+  res.send(cartShowTemplate({ items: cart.items }));
+});
+```
+
+### Rendering the List
+
+(This lecture seems to be an accidental repeat of part of last lecture) This lecture also comes with a style sheet to copy and paste, to make the Cart page look better!
+
+### Totaling Cart Items
+
+To total the items in the cart, we can do two options:
+
+```
+let totalPrice = 0;
+for (let item of items) { totalPrice += item.quantity * item.product.price;
+```
+
+Or using the array.reduce() function:
+
+```
+const totalPrice = items.reduce((prev, item) => {
+  return prev + item.quantity * item.product.price;
+}, 0);
+```
+
+### Removing Cart Items
+
+We will wrap our Delete buttin in a form, and give it a hidden input with appropriate value and name to tell our server which product to remove:
+
+```
+<form method="POST" action="/cart/products/delete">
+  <input hidden value="${item.id}" name="itemId" />
+  <button class="button is-danger">
+    <span class="icon is-small">
+      <i class="fas fa-times"></i>
+    </span>
+  </button>
+</form>
+```
+
+### Redirect on Remove
+
+We can handle our deletion request as follows:
+
+```
+// Receive a POST request to delete an item from a cart
+router.post('/cart/products/delete', async (req, res) => {
+  const { itemId } = req.body;
+  const cart = await cartsRepository.getOne(req.session.cartId);
+
+  // Only keep items that DO NOT equal the ID of what we want to remove
+  const items = cart.items.filter((item) => itemId !== item.id);
+
+  await cartsRepository.update(req.session.cartId, { items });
+
+  res.redirect('/cart');
+});
+```
+
+#### `Originally Completed: 10/29/2021`

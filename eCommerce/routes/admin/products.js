@@ -60,7 +60,26 @@ router.post(
   [requireProductTitle, requireProductPrice],
   handleErrors(productsEditTemplate),
   async (req, res) => {
-    
+    const productEdits = req.body;
+
+    if (req.file) productEdits.image = req.file.buffer.toString('base64');
+
+    try {
+      await productsRepository.update(req.params.id, productEdits);
+    } catch (error) {
+      return res.send('Could not find item');
+    }
+
+    res.redirect('/admin/products');
+  }
+);
+
+router.post(
+  '/admin/products/:id/delete',
+  requireAuthentication,
+  async (req, res) => {
+    await productsRepository.delete(req.params.id);
+    res.redirect('/admin/products');
   }
 );
 

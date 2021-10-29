@@ -2,7 +2,7 @@ const layout = require('../layout');
 
 module.exports = ({ products }) => {
   const renderedProducts = products
-    .map(product => {
+    .map((product) => {
       return `
       <tr>
         <td>${product.title}</td>
@@ -15,7 +15,9 @@ module.exports = ({ products }) => {
           </a>
         </td>
         <td>
-          <button class="button is-danger">Delete</button>
+            <form method="POST" action="/admin/products/${product.id}/delete">
+                <button class="button is-danger">Delete</button>
+            </form>
         </td>
       </tr>
     `;
@@ -41,6 +43,6 @@ module.exports = ({ products }) => {
           ${renderedProducts}
         </tbody>
       </table>
-    `
+    `,
   });
 };

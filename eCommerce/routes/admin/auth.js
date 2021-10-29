@@ -15,10 +15,6 @@ const {
 const router = express.Router();
 
 // Route Handlers
-router.get('/', (req, res) => {
-  res.send('Welcome to Home!');
-});
-
 router.get('/signup', (request, response) => {
   response.send(signupTemplate({ request }));
 });
