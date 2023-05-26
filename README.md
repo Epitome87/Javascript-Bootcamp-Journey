@@ -29,8 +29,8 @@ No automatic sharing between files like within the Browser! Must use the module 
 
 To make a variable, object, function, or any piece of code available in another file, we can do the following:
 
-```
-(In index.js)
+```js
+// (In index.js)
 
 // Note the use of a relative path to the file.
 const message = require("./myscript.js");
@@ -45,8 +45,8 @@ module.exports = "I'm available to other files now!";
 
 When we run `node index.js`, Node is finding all the content inside that file and wrapping it inside of a function. The function looks like:
 
-```
-function(exports, require, modeule, __filename, __dirname) {
+```js
+function(exports, require, module, __filename, __dirname) {
     const message = require("./myscript.js");
     console.log(message);
 }
@@ -74,7 +74,7 @@ For the most part, whenever we are running some Node code, the arguments we are 
 
 ### The Require Cache
 
-When we require in a file and run that file and get some exports from it, we simulatenously update the require cache. We can view it by observing the `require.cache` variable.
+When we require in a file and run that file and get some exports from it, we simultaneously update the require cache. We can view it by observing the `require.cache` variable.
 
 The require cache is an object that stores the result of requiring in a file. It has some number of keys and values. The keys are the names of the different files we require in ("myscript.js" for example). The value is whatever we exported from that file (the string "I'm available to other files now!" in our examples).
 
@@ -83,7 +83,7 @@ Instead, Node takes a look at the require cache, sees we already required in tha
 
 Inside the require cache, we get an object full of files. The shape of the object includes:
 
-```
+```js
 // Console logging require.cache:
 {
     "./index.js":
@@ -105,11 +105,11 @@ Inside the require cache, we get an object full of files. The shape of the objec
 
 Why is this important to know? If you're exporting more complex, ever-changing code (like an object that increments a counter), it's important to realize that the object is only initialized once. If you `require` that object's code a second time, it will not start at its default, fresh state. Rather, it keeps that state of whatever it was when you were working with it via the original `require` statement. Example:
 
-```
+```js
 // In myscript.js
 let counter = 0;
 
-module.exporst = {
+module.exports = {
     incrementCounter() {
         counter = counter + 1;
     }
@@ -134,7 +134,7 @@ There are multiple ways to Debug with Node, rather than relying on hundreds of c
 - `node inspect index.js`
   - Start up a debugger CLI and pause execution whenever a "debugger" statement is hit
 - `node --inspect index.js`
-  - Start up a debugger instance and pause exeuction whenever a "debugger" statement is hit. Access the deubger at "chrome://inspect"
+  - Start up a debugger instance and pause execution whenever a "debugger" statement is hit. Access the debugger at "chrome://inspect"
 - `node --inspect-brk index.js`
   - Start up a debugger instance and _wait_ to _execute_ until a debugger is connected. Access the debugger at "chrome://inspect"
 
@@ -153,7 +153,7 @@ Running the debugging through the Chrome inspector is a lot more user-friendly! 
 
 ### App Overview
 
-The project for this course section using Node is relatively simple and straightforward. Using Node, we will recreate the `ls` command functionality, where it prints out files and folders in the current directory (if no additional arguments are provided), or prints out files and folders in relative or aboslute path (if a path argument is provided). It will run directly at our terminal inside any project or directory on our machine.
+The project for this course section using Node is relatively simple and straightforward. Using Node, we will recreate the `ls` command functionality, where it prints out files and folders in the current directory (if no additional arguments are provided), or prints out files and folders in relative or absolute path (if a path argument is provided). It will run directly at our terminal inside any project or directory on our machine.
 
 With Node, we can read out files and folders inside a directory using a Node Standard Library module called File System. Note that we **cannot** access the user's file system in just the Browser!
 
@@ -174,9 +174,9 @@ Note that this callback pattern is **extremely** common in Node! They usually ta
 
 ### The Process.cwd Function
 
-We often don't use the "." path shortcut that often. We use a built-in function of Node that belongs to another Standard Library module: `process.cwd()` provided by the Process library. Note that cwd stantds for "Current Working Directory." Although it means the same thing as the "." syntax, it's a lot more reliable and cross-platform friendly.
+We often don't use the "." path shortcut that often. We use a built-in function of Node that belongs to another Standard Library module: `process.cwd()` provided by the Process library. Note that cwd stands for "Current Working Directory." Although it means the same thing as the "." syntax, it's a lot more reliable and cross-platform friendly.
 
-Note: The Process module is provided automatically into the global scope of every project -- does not need to be reuqired! This is one of the few modules that behaves in this way.
+Note: The Process module is provided automatically into the global scope of every project -- does not need to be required! This is one of the few modules that behaves in this way.
 
 ### Running a Node Program as an Executable
 
@@ -214,7 +214,7 @@ The `fs.Stats` object contains a bunch of somewhat cryptic properties. But it pr
 
 ### A Buggy Initial Implementation
 
-```
+```js
 fs.readdir(process.cwd(), (err, filenames) => {
   // err === an error object, meaning something went wrong
   // err === null, which means everything is OK! :)
@@ -243,7 +243,7 @@ The above code isn't ideal, as the different invocation times of the lstat callb
 
 ### Optional Solution #1
 
-We have three diffrent options for refactoring our code to perform more ideally.
+We have three different options for refactoring our code to perform more ideally.
 
 1. Maintain an array of the results from each lstat. As each callback is invoked, add the stats object to this array. When array is full, log everything in it.
 2. Wrap the lstat call with a promise, use async/await syntax to process lstat call one at a time.
@@ -259,7 +259,7 @@ Let's implement Option #1 above. Refer to the index.js file for the implementati
 
 In Solution #2, we use a Promise version of callbacks. We can wrap our call to `fs.lstat` in a function that returns a Promise, as follows:
 
-```
+```js
 // Option #2A: Promise-Based callback solution
 const lstat = (filename) => {
   return new Promise((resolve, reject) => {
@@ -290,7 +290,7 @@ Whenever working with all the different NodeJS functions that take callbacks, we
 
 Solution 2C (Promise-based, using Node's Promise-based implementation of lstat):
 
-```
+```js
 const lstat = fs.promises.lstat;
 
 fs.readdir(process.cwd(), async (err, filenames) => {
@@ -313,13 +313,13 @@ Very simple! But there is an issue...
 
 - We are only running one lstat operation at a time! If we had thousands of files, even the speediest of sequential processes would really add up.
 
-This leads us to the ideal solution, #3. This is similiar to option 2, but we use the Promise.all helper method to process lstat calls all at once!
+This leads us to the ideal solution, #3. This is similar to option 2, but we use the Promise.all helper method to process lstat calls all at once!
 
 ### Promise.all-Based Solution
 
 We call Promise.all with an array of Promise objects. Promise.all waits for every Promise in the array to be resolved, takes data from each of them, throw it in an array, and give us the big array with all the data! They run in parallel. We only make use of the `await` keyword on Promise.all instead of each individual Promise-based call (in our case, the call of `lstat)
 
-```
+```js
 // Solution 3: Optimal Solution!
 const statPromises = filenames.map((filename) => {
   return lstat(filename);
@@ -345,7 +345,7 @@ Our version of the `ls` command is still missing a feature: We can't type in an 
 
 We can make use of arguments passed to our program by calling using the `process.argv` variable we have access to. It is an array of arguments our program was called with. It has 2 used for us by default, so the one we specify after our custom `nls` command will be placed as the third element in the array. Therefore we can access it via: `process.argv[2]`. We can then do:
 
-```
+```js
 // Set the directory we want to examine as the 3rd argument in the process variable, if it exists.
 // Otherwise, just use the current working directory.
 const targetDirectory = process.argv[2] || process.cwd();
@@ -361,14 +361,14 @@ We need to make use of Node's built-in `Path` module: `const path = require("pat
 
 We specifically need to make use of `path.join()`. In our case, we make the following change:
 
-```
-  const statPromises = filenames.map((filename) => {
-    // return lstat(filename);
-    return lstat(path.join(targetDirectory, filename));
-  });
+```js
+const statPromises = filenames.map((filename) => {
+  // return lstat(filename);
+  return lstat(path.join(targetDirectory, filename));
+});
 ```
 
-### App Wrapup
+### App Wrap-up
 
 In this project, we:
 
@@ -418,7 +418,7 @@ The built-in web server included with the Node standard library is a little shor
 
 To get a web server up and running with express, we simply require it in the code, and then listen to a port, and handle routes.
 
-```
+```js
 const express = require('express');
 const app = express();
 
@@ -446,7 +446,7 @@ The HTTP Request has a couple of pieces of information:
 - Path: "/"
 - Method: "GET" (The default method) This indicates the _intent_ of the request. Get? Delete? Update?
 
-The request was handed off to our OS, in charge of accessing some network devices, and sending the reqeust out over the open internet.
+The request was handed off to our OS, in charge of accessing some network devices, and sending the request out over the open internet.
 When making a request other than to localhost, our OS is going to reach out to a DNS Server. It is an outside server on the internet which has a mapping between host names and IP Addresses. The DNS Server sends back the IP Address. Our OS then makes a second request to the IP Address and gets a response back.
 
 For localhost, our OS does not reach out to a DNS Server. "I'm going to handle this request on my own!" It looks at the Port specified in the request (65,000 ports for our computer to access). It sees the Port 3000 and takes the request and sends it to whatever piece of software is running on Port 3000. In our case, we told our express server to be listening in on Port 3000! Express receives whatever request was sent. At this point, it does not care about the host or port, only the path and method. Express then runs the request through its Router, looking at the path and method and calling the appropriate callback function that we registered with the router.
@@ -466,8 +466,8 @@ Callback function then takes the incoming request and outgoing response, formula
 
 How do we show HTML? In our express `res.send()` method, instead of just sending a string, we can send HTML! For example:
 
-```
-res.send(<p>Hello!</p>)
+```js
+res.send(<p>Hello!</p>);
 ```
 
 ### Understanding Form Submissions
@@ -495,7 +495,7 @@ We have to figure out how to take all these little chunks of info and assemble t
 
 To do a very primitive parsing of the body content ourselves, we can use `req.on()`, convert its Buffer representation of our data into a readable String format, and then do some logic on that String to grab our individual key-value pairs:
 
-```
+```js
 app.post('/', (req, res) => {
   req.on('data', (data) => {
     const parsed = data.toString('utf8').split('&');
@@ -504,7 +504,6 @@ app.post('/', (req, res) => {
       const [key, value] = pair.split('=');
       formData[key] = value;
     }
-
   });
 });
 ```
@@ -516,7 +515,7 @@ After a request is made, it goes through the Middleware, before then being sent 
 
 Our form-parsing logic is a perfect candidate to be made a Middleware.
 
-```
+```js
 // Middleware for parsing the request body
 function bodyParser(req, res, next) {
   // We only want to run this Middleware on POST requests
@@ -538,21 +537,22 @@ function bodyParser(req, res, next) {
   else next();
 }
 
-app.post('/', bodyParser, (req, res) => {
-});
+app.post('/', bodyParser, (req, res) => {});
 ```
 
 ### Globally Applying Middleware
 
-Our ipplementation of body parsing isn't ideal: It only handles POST requests so far, while many other request types contain body elements. We can replace it with an outside library: `npm install body-parser` to install, and then use it like:
+Our implementation of body parsing isn't ideal: It only handles POST requests so far, while many other request types contain body elements. We can replace it with an outside library: `npm install body-parser` to install, and then use it like:
 
-```
+```js
 app.post('/', bodyParser.urlencoded({ extended: true }), (req, res) => {
 ```
 
-However, we still have to write out the middleware call every place we want it (as an argument of a route). There's a better solution! We can use the Middeleware globally:
+However, we still have to write out the middleware call every place we want it (as an argument of a route). There's a better solution! We can use the Middleware globally:
 
-`app.use(bodyParser.urlencoded({extended: true}));`
+```js
+app.use(bodyParser.urlencoded({extended: true}));`
+```
 
 Now every route will have its body parsed automatically. The body-parser library automatically detects what type of request we are working with and not apply it with a "GET" request.
 
@@ -569,14 +569,14 @@ We need some persistent data store in order to preserve customer account informa
 The downsides of our solution are:
 
 - Will error if we try to open/write to the same file twice at the same time
-- Won't work if we have multiple servers running on differnet machines
-- We have to write to the File System every time we want to udpate some data => Bad performance!
+- Won't work if we have multiple servers running on different machines
+- We have to write to the File System every time we want to update some data => Bad performance!
 
 Why waste our time with this then? Good Javascript experience, practice with code re-use using classes and inheritance.
 
 ### Different Data Modeling Approaches
 
-We will have a "Users Repository" and "Products Repository" to store our data. Here is a list of methods we may want to have for the Users Respository:
+We will have a "Users Repository" and "Products Repository" to store our data. Here is a list of methods we may want to have for the Users Repository:
 
 | Method   | Input Arguments | Return Value | Description                                                   |
 | -------- | --------------- | ------------ | ------------------------------------------------------------- |
@@ -607,7 +607,7 @@ Even though we should never do it in production software, we are going to do a s
 
 We can do the following to check if a file exists / create a new file if it does not:
 
-```
+```js
   // Check to see if this file exists
   try {
     fs.accessSync(this.filename);
@@ -628,19 +628,19 @@ It returns the contents of the file as a string, just like that!
 
 ### Small Refactor
 
-We can shortern our `getAll()` method to:
+We can shorten our `getAll()` method to:
 
-```
-  return JSON.parse(
-    await fs.promises.readFile(this.filename, {
-      encoding: 'utf8',
-    })
-  );
+```js
+return JSON.parse(
+  await fs.promises.readFile(this.filename, {
+    encoding: 'utf8',
+  })
+);
 ```
 
 ### Saving Records
 
-```
+```js
 async create(attributes) {
   // Open / read our current contents of users data file.
   const records = await this.getAll();
@@ -657,7 +657,7 @@ async create(attributes) {
 
 We can refactor the code above to wrap the last line in its own method, as we will be re-using it a lot:
 
-```
+```js
 async writeAll(records) {
   await fs.promises.writeFile(
     this.filename,
@@ -672,32 +672,35 @@ The third argument is a "space" -- a String or Number object that's used to inse
 
 Now our JSON is much more readable!
 
-```
+```js
 // Using JSon.stringify(records);
-[ { "email": "test@test.com", "password": "password" },{"email": "test1@test.com","password": "password"} ]
+[
+  { email: 'test@test.com', password: 'password' },
+  { email: 'test1@test.com', password: 'password' },
+];
 ```
 
-```
+```js
 // Using JSON.stringify(records, null, 2);
 [
   {
-    "email": "test@test.com",
-    "password": "password"
+    email: 'test@test.com',
+    password: 'password',
   },
   {
-    "email": "test1@test.com",
-    "password": "password"
-  }
-]
+    email: 'test1@test.com',
+    password: 'password',
+  },
+];
 ```
 
 ### Random ID Generation
 
 We need to assign unique IDs to each of our users, as to differentiate them. This is especially important in other types of records (like products), where it is entirely possible that two products have the same "name" property. We need a way to know which is which. This is where our `randomId()` function comes in!
 
-We will make use of Node's "Crypto" (Crytography) module. This module has tons of functions related for handling and ciphering and encrypting and decrypting data. We can make use of the `crypto.randomBytes()` method.
+We will make use of Node's "Crypto" (Cryptography) module. This module has tons of functions related for handling and ciphering and encrypting and decrypting data. We can make use of the `crypto.randomBytes()` method.
 
-```
+```js
 const crypto = require("crypto");
 
 // Make use of Node's Crypto module to generate a random ID (and string it to a hex value)
@@ -714,7 +717,7 @@ records.push(record);
 
 Now that we have Ids, we can create our User Repository methods that require an ID: getOne(id), delete(id), and update(id, attributes). We will create the `getOne(id)` method in this lecture.
 
-```
+```js
 async getOne(id) {
   // Retrieve all records
   const records = await this.getAll();
@@ -726,7 +729,7 @@ async getOne(id) {
 
 ### Deleting Records
 
-```
+```js
 async delete(id) {
   // Retrieve all records
   const records = await this.getAll();
@@ -747,7 +750,7 @@ randomId() {
 
 ### Updating Records
 
-```
+```js
 async update(id, attributes) {
   // Retrieve all records
   const records = await this.getAll();
@@ -772,7 +775,7 @@ async update(id, attributes) {
 
 Our `getOneBy()` method is the most complex -- so we saved it for last! The goal of this method is to call it with some filters object, and return the first user that matches those filters.
 
-```
+```js
 async getOneBy(filters) {
   // Return if no filters provided
   if (!filters) return;
@@ -805,12 +808,12 @@ We need to use our now-finished UsersRepository class in another file. What is t
 
 One approach would be:
 
-```
+```js
 module.exports = UsersRepository;
 
 // In another file...
-const UsersRepository = require("./users");
-const repo = new UsersRepository("users.json");
+const UsersRepository = require('./users');
+const repo = new UsersRepository('users.json');
 repo.getAll();
 ```
 
@@ -818,11 +821,11 @@ But this doesn't seem very ideal. What if another file also requires UsersReposi
 
 Instead, let's export an _instance_ of the class:
 
-```
+```js
 module.exports = new UsersRepository('users.json');
 
 // Another file...
-const repo = require(".users");
+const repo = require('.users');
 repo.getAll();
 ```
 
@@ -838,16 +841,14 @@ Our signup logic (we move to next step if no error):
 
 With this in mind, our new "POST" request looks like:
 
-```
+```js
 app.post('/', async (req, res) => {
   const { email, password, passwordConfirmation } = req.body;
 
   const existingUser = await usersRepo.getOneBy({ email });
-  if (existingUser)
-    return res.send('Email already in use');
+  if (existingUser) return res.send('Email already in use');
 
-  if (password !== passwordConfirmation)
-    return res.send('Passwords do not match');
+  if (password !== passwordConfirmation) return res.send('Passwords do not match');
 
   usersRepo.create({ email, password });
 
@@ -879,7 +880,7 @@ How can we interact with the user's cookie? We can figure out how to manipulate 
 
 The cookie-session library is a middleware function, just like body-parser. We have to write it up to our express app, via app.use().
 
-```
+```js
 app.use(
   cookieSession({
     keys: ['euab74n39bnopqldkew83blaejyvctq7adjlke3'],
@@ -889,24 +890,25 @@ app.use(
 
 Note the keys property: It is used to encrypt all the information that is stored in the Cookie. This will help prevent the user from modifying the cookie to pretend they are somewhere they are not.
 
-The cookie-session library adds exactly one property to our Express app, on the request object: `req.session`. It is a plain Javascript object, and we can add as many properties as we wish to the session object. Any information we throw in there will automatically be mantained by cookie-session for us.
+The cookie-session library adds exactly one property to our Express app, on the request object: `req.session`. It is a plain Javascript object, and we can add as many properties as we wish to the session object. Any information we throw in there will automatically be maintained by cookie-session for us.
 
 Now we can do:
 
-```
-// Store the id of that user inside the user's cookie req.session.userId = user.id;
+```js
+// Store the id of that user inside the user's cookie
+req.session.userId = user.id;
 ```
 
 ### Signing Out a User
 
 To sign out, we simply indicate we wish to forget our current Session object.
 
-```
+```js
 app.get('/signout', (req, res) => {
-// Forget the current session object. Cookie-Session will handle the rest!
-req.session = null;
+  // Forget the current session object. Cookie-Session will handle the rest!
+  req.session = null;
 
-res.redirect('/');
+  res.redirect('/');
 });
 ```
 
@@ -918,7 +920,7 @@ Flow-chart for signing a user in:
 2. Does the existing user record have the same password as the one supplied? -> No -> Show an error
 3. Sign this user in!
 
-```
+```js
 app.post('/signin', async (req, res) => {
   const { email, password } = req.body;
 
@@ -947,7 +949,7 @@ There's a very big security issue with our current solution: Our data store (use
 
 **Never store passwords in plain text!**
 
-We need to use a hashing algorithm. The goal of a hash algorithm is to take a string and spit out a seemingly-random series of numbers and letters. Hash algorithms have a very important property: The same input string always provides the same output. SHA256 is the name of one popular hashing algorithm. Hashing algorithms do not work in reverse. Changing even just one input character changes the hash output significantally.
+We need to use a hashing algorithm. The goal of a hash algorithm is to take a string and spit out a seemingly-random series of numbers and letters. Hash algorithms have a very important property: The same input string always provides the same output. SHA256 is the name of one popular hashing algorithm. Hashing algorithms do not work in reverse. Changing even just one input character changes the hash output significantly.
 
 What we store in our database is the hashed version of the user's password. When he signs up and signs in, we run their input password through our hashing algorithm. We check to see if the hash version matches the hash that was previously saved to the database (as the user's hashed password).
 
@@ -956,7 +958,7 @@ However, there's still one security hole with this method...
 ### Salting Passwords
 
 The security hole with hash algorithms has to do with taking advantage of known common passwords. This leads to a "Rainbow Table Attack".
-A malicious user can find a list of common passwords and build up a look-up table of their corresponding hash values. For example, they'll know common password "monkey" has a SHA256 hash of "000c285457fc9". Now, if a malicious user gains access to our users.json file, they'll see all the hash values, and compare them to their tables. If they find "000c285457fc9" in our data store, they know that non-hashed password is "monkey"! They can now sign into their account. This type of attack is not as succesful if your password is truly complex and unique.
+A malicious user can find a list of common passwords and build up a look-up table of their corresponding hash values. For example, they'll know common password "monkey" has a SHA256 hash of "000c285457fc9". Now, if a malicious user gains access to our users.json file, they'll see all the hash values, and compare them to their tables. If they find "000c285457fc9" in our data store, they know that non-hashed password is "monkey"! They can now sign into their account. This type of attack is not as successful if your password is truly complex and unique.
 
 To prevent this, we add an additional random string of characters to every password we hash, called a "Salt". This "Salt" is different for every user. The "Salt" is appended to the un-hashed password, and that combined input is ran through the hashing algorithm.
 
@@ -971,7 +973,7 @@ The Node.JS standard library's "Crypto" module will help us achieve our salting 
 
 `crypto.scrypt(password, salt, keylength[,options],callback)` (named after a specific password hashing algorithm) to hash our password.
 
-```
+```js
 // Inside our user repository create() method:
 // Generate a random salt
 const salt = crypto.randomBytes(8).toString('hex');
@@ -982,14 +984,13 @@ const record = {
   password: `${buffer.toString('hex')}.${salt}`,
 };
 records.push(record);
-
 ```
 
 ### Comparing Hashed Passwords
 
-```
+```js
  async comparePasswords(savedPassword, suppliedPassword) {
-// savedPassw=rd -> password saved in our database: "hashed.salt"
+// savedPassword -> password saved in our database: "hashed.salt"
 // suppliedPassword -> password given to us by a user trying to sign in
 const [hashed, salt] = savedPassword.split('.');
 const hashedSupplied = await scrypt(suppliedPassword, salt, 64);
@@ -1001,12 +1002,9 @@ return hashed === hashedSupplied;
 
 In our "GET" route for the "signin" route, we update our password check with the following:
 
-```
+```js
 /*No Longer Use This!*/ // if (user.password !== password) {
-const isValidPassword = await usersRepo.comparePasswords(
-  user.password,
-  password
-);
+const isValidPassword = await usersRepo.comparePasswords(user.password, password);
 if (!isValidPassword) return res.send('Invalid password');
 ```
 
@@ -1016,7 +1014,7 @@ In the next section, we will refactor the code and better structure the project.
 
 #### `Originally Completed: 10/24/2021`
 
-## Section 29: Strcuturing Javascript Projects
+## Section 29: Structuring Javascript Projects
 
 #### `Originally Started: 10/25/2021`
 
@@ -1045,7 +1043,7 @@ const app = express();
 app.use(authRouter);
 ```
 
-This is essentially a convention to create "Sub" routers in other files, and hook them up as middelware to our express app.
+This is essentially a convention to create "Sub" routers in other files, and hook them up as middlware to our express app.
 
 ### HTML Templating Functions
 
@@ -1064,9 +1062,9 @@ Although I know EJS from other projects, I think I will follow this course's app
 
 Example of this strategy:
 
-```
+```js
 // views/admin/auth/signup.js
-module.exports = ({request}) => {
+module.exports = ({ request }) => {
   return `
     <div>
         ${request.session.userId}
@@ -1086,7 +1084,6 @@ const signupTemplate = require('../../views/admin/auth/signup');
 router.get('/signup', (request, response) => {
   response.send(signupTemplate({ request }));
 });
-
 ```
 
 ### HTML Reuse with Layouts
@@ -1099,7 +1096,7 @@ To solve this, we can create a _layout_ file. It will contain all the standard H
 
 ### Building a Layout File
 
-```
+```js
 // views/admin/layout.js
 module.exports = ({ content }) => {
   return `
@@ -1145,7 +1142,7 @@ We can also standardize an incoming email via sanitization.
 
 We can use the `express-validator` library as follows:
 
-```
+```js
 router.post(
   '/signup',
   [
@@ -1162,7 +1159,7 @@ router.post(
 
 Right now, we are validating user input in two different spots -- once in the `express-validator` middleware, and then once again shortly after when we do our own check that ensures the email is not already in use by another user, or when the password and confirmation password fields are not the same value. This is not good practice! We want to merge / centralize our validation logic into one check. We need a custom validator to add to the `express-validator` validation chain.
 
-```
+```js
 [
   check('email')
     .trim()
@@ -1186,11 +1183,11 @@ Right now, we are validating user input in two different spots -- once in the `e
 ### Extracting Validation Chains
 
 We need to pull out all the validation logic out of our auth.js file.
-We also need to figure out how to show the form validation errors on the original form, so the user knows what they did wrong without being taken to a seperate page that tells them so.
+We also need to figure out how to show the form validation errors on the original form, so the user knows what they did wrong without being taken to a separate page that tells them so.
 
 We can create a `routes/admin/validators.js` file and do the following:
 
-```
+```js
 module.exports = {
   requireEmail: check('email')
     .trim()
@@ -1204,7 +1201,7 @@ module.exports = {
 
 And now in our auth.js file:
 
-```
+```js
 router.post(
   '/signup',
   [requireEmail, requirePassword, requirePasswordConfirmation],
@@ -1220,7 +1217,7 @@ Now we actually need to handle user's entering invalid form data, not just detec
 
 First, we create a helper function that will return the error messages:
 
-```
+```js
 function getError(errors, property) {
   try {
     return errors.mapped()[property].msg;
@@ -1229,14 +1226,11 @@ function getError(errors, property) {
 
 Now in our HTML for the signup page, we can do:
 
-```
-<form method="POST">
-  <input name="email" placeholder="email" />
-  ${getError(errors, 'email')}
-  <input name="password" placeholder="password" />
-  ${getError(errors, 'password')}
-  <input name="passwordConfirmation" placeholder="password confirmation" />
-  ${getError(errors, 'passwordConfirmation')}
+```js
+<form method='POST'>
+  <input name='email' placeholder='email' />${getError(errors, 'email')}
+  <input name='password' placeholder='password' />${getError(errors, 'password')}
+  <input name='passwordConfirmation' placeholder='password confirmation' />${getError(errors, 'passwordConfirmation')}
   <button>Sign Up</button>
 </form>
 ```
@@ -1265,7 +1259,7 @@ Much like we're doing with our signin and signup, where our browser makes a requ
 
 To do so, we make a "public" directory: We're going to expose this directory to the outside world, so a browser can freely access it. We place any CSS files, any fonts, any images, any Javascript code (that we want to make available to browser). Never place secret/important files in there! Always hide server code from browser.
 
-But there's still another step: We need to tell Expess explicitely that we want to make this directory available to the outside world.
+But there's still another step: We need to tell Expess explicitly that we want to make this directory available to the outside world.
 `app.use(express.static('public'));`
 
 The line above changes how Express handles every single request we get. Now Express first looks at the incoming request and looks to see if there's a file in the "public" directory that the request is looking for. If there is, it sends that file back. If not, it continues on and runs all the other Middleware and route handlers that we've set up.
@@ -1278,9 +1272,9 @@ Next up is finishing the Admin Panel.
 
 ### Product Routes
 
-Much like we did when we refactored our routes from index.js to auth.js, we need to create a Router object, define some of its routes, and then export that to our index.js. We then use it as a middeleware. Not much new from before. We will define these routes in "products.js" and export them in "index.js"
+Much like we did when we refactored our routes from index.js to auth.js, we need to create a Router object, define some of its routes, and then export that to our index.js. We then use it as a middleware. Not much new from before. We will define these routes in "products.js" and export them in "index.js"
 
-```
+```js
 // index.js
 const productsRouter = require('./routes/admin/products');
 ...
@@ -1303,13 +1297,13 @@ Now we create the ProductsRepository class. It "extends" the base Repository cla
 
 Another simple lecture.
 
-```
+```js
 // newProduct.js
 const layout = require('../layout');
 const { getError } = require('../../helpers');
 
 module.exports = ({ errors }) => {
-const content = `
+  const content = `
   <form method="POST">
       <input placeholder="Title" name="title" />
       <input placeholder="Price" name="price" />
@@ -1318,16 +1312,15 @@ const content = `
   </form>
 `;
 
-return layout({ content });
+  return layout({ content });
 };
-
 ```
 
 ### Some Quick Validation
 
 We must note that when we submit a form, no matter what we type in, our server is always going to receive that value as a string. Therefore, when validating our product price input, we want to chain on `.toFloat()` to our validation chain on the price.
 
-```
+```js
 // validators.js
 requireProductTitle: check('title')
   .trim()
@@ -1345,7 +1338,7 @@ requireProductPrice: check('price')
 
 ## Section 30: Image and File Upload
 
-This section continues right off from the last lecture, where we are working on finishing our Admin Panel's ablity to add new products.
+This section continues right off from the last lecture, where we are working on finishing our Admin Panel's ability to add new products.
 
 #### `Originally Started: 10/28/2021`
 
@@ -1369,12 +1362,12 @@ There is another option we can provide to a form element: `enctype= `
 
 Core issue around using the defaults with file input types
 
-- Files might have some data inside of it which can not be safely or efficiently trasmitted into a URL-safe format
+- Files might have some data inside of it which can not be safely or efficiently transmitted into a URL-safe format
 - Form has no idea how to turn that file into a URL-safe string, so just transmits the name of the file
 
 We need another encoding type to resolve this; `enctype="multipart/form-data"`
 
-- This means take all the differente pieces of info out of our form, and for each separate input, send each little part to the backend in a different little part.
+- This means take all the different pieces of info out of our form, and for each separate input, send each little part to the backend in a different little part.
 
 ### Accessing the Uploaded File
 
@@ -1382,23 +1375,18 @@ The body-parse middleware we're using right now is not sufficient to reach into 
 
 Instead, we will use the `multer` npm library to do multipart/form-data parsing!
 
-```
+```js
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage() });
 
 // In our POST route for new products
-router.post(
-  '/admin/products/new',
-  [requireProductTitle, requireProductPrice],
-  upload.single('image'),
-  (req, res) => {
-    const errors = validationResult(req);
+router.post('/admin/products/new', [requireProductTitle, requireProductPrice], upload.single('image'), (req, res) => {
+  const errors = validationResult(req);
 
-    console.log(req.file);
+  console.log(req.file);
 
-    res.send('Submitted');
-  }
-);
+  res.send('Submitted');
+});
 ```
 
 ### [Optional] Different Methods of Image Storage
@@ -1411,7 +1399,7 @@ We are going to handle image saving in a way that is **NOT** the best or most op
 
 We are going to take the file that is uploaded and turn it into a string that can be safely stored inside the products.json file. We then take that string and create a new record out of it using our products repo, which in turn will save it into products.json.
 
-```
+```js
 const image = req.file.buffer.toString('base64');
 const { title, price } = req.body;
 
@@ -1426,11 +1414,11 @@ Looks like it works! But there's one small bug...
 
 Although it looks like a new product is being created and saved to our json file based off the correct user input in the new product form fields, that is not the case. Not especially how our "price" is saved as a string, whereas it should be a number.
 
-Basically, since the body-parser middleware is not handling the new products form, it is no longer running for our incoming request. It no longer parses the contents of the post request and throwing it into `req.body`. Yet we still can receive our title and price and image in `req.body` -- how? Because multer! It's parsing "title" and "price" for us. The problem is the order in which our validators and multer middeleware are running! When we were having our body parsed with body-parser, we were "using" that middleware before our validators were called (via `app.use(bodyParser())`) -- this makes it called before every individual route middleware we specify in the route itself. As far as our validators are concerned, no "price" or "title" were provided, so the validation fails.
+Basically, since the body-parser middleware is not handling the new products form, it is no longer running for our incoming request. It no longer parses the contents of the post request and throwing it into `req.body`. Yet we still can receive our title and price and image in `req.body` -- how? Because multer! It's parsing "title" and "price" for us. The problem is the order in which our validators and multer middleware are running! When we were having our body parsed with body-parser, we were "using" that middleware before our validators were called (via `app.use(bodyParser())`) -- this makes it called before every individual route middleware we specify in the route itself. As far as our validators are concerned, no "price" or "title" were provided, so the validation fails.
 
 The fix is simple: Swap validators and multer!
 
-```
+```js
 router.post(
   '/admin/products/new',
   upload.single('image'), // Put this first!
@@ -1446,7 +1434,7 @@ In this lecture, we just add some styling (by copying and pasted updated "new.js
 
 Let's create our own middleware function for error handling of our validators! We create a middlewares.js file in our routes/admin directory:
 
-```
+```js
 const { validationResult } = require('express-validator');
 
 module.exports = {
@@ -1475,7 +1463,7 @@ router.post(
 
 To display our products, we listen for a "GET" request on the "admin/products" route, we retrieve all the products from the products database,
 
-```
+```js
 // views/admin/products/index.js
 const layout = require('../layout');
 
@@ -1513,15 +1501,15 @@ We need to make sure we add some code in our admin routes to make sure a user is
 
 We need to check if the `req.session.userId` property is defined before we allow admin access to these routes!
 
-```
+```js
 if (!req.session.userId) {
-  return res.redirect("/signin");
+  return res.redirect('/signin');
 }
 ```
 
 This introduces duplicate code, so we can wrap this inside a function into our middlewares.js file!
 
-```
+```js
 // middlewares.js
 requireAuthentication(req, res, next) {
   if (!req.session.userId) {
@@ -1547,11 +1535,9 @@ So how can we click the Edit / Delete button by a product and do the required lo
 
 The best way to handle Edit functionality is to somehow encode into our button the Id of the product we wish to edit (href):
 
-```
+```html
 <a href="/admin/products/${product.id}/edit">
-  <button class="button is-link">
-    Edit
-  </button>
+  <button class="button is-link">Edit</button>
 </a>
 ```
 
@@ -1561,7 +1547,7 @@ Now we need to put together a route handler that can receive these requests!
 
 We can have a "Wildcard" in the URL by putting ":" , as in: `router.get("/admin/products/:id/edit", (req, res))`
 
-```
+```js
 router.get('/admin/products/:id/edit', async (req, res) => {
   const productId = req.params.id;
   const productToEdit = await productsRepository.getOne(productId);
@@ -1576,7 +1562,7 @@ router.get('/admin/products/:id/edit', async (req, res) => {
 
 ### Displaying an Edit Form
 
-```
+```js
 const layout = require('../layout');
 
 module.exports = ({ product }) => {
@@ -1604,7 +1590,7 @@ In this section we will finish the Admin Panel and work on the User's Shopping C
 
 ### Editing a Product
 
-```
+```js
 router.post(
   '/admin/products/:id/edit',
   requireAuthentication,
@@ -1645,10 +1631,10 @@ To delete a product, we can wrap our Delete button in a form element. Why not wr
 
 So, we wrap the Delete button in a form, give it a `method="POST"` and an `action="/admin/products/${product.id}/delete"` as the URL its making the POST request to. By default the action property is the current URL (/admin/products in our case).
 
-```
+```js
 // In /views/admin/products/index.js
-<form method="POST" action="/admin/products/${product.id}/delete">
-    <button class="button is-danger">Delete</button>
+<form method='POST' action='/admin/products/${product.id}/delete'>
+  <button class='button is-danger'>Delete</button>
 </form>
 ```
 
@@ -1666,7 +1652,7 @@ In this lecture, we create a "routes/products.js" file to handle user product ro
 
 ### Products Index
 
-```
+```js
 // In views/products/index.js
 module.exports = ({ products }) => {
   const renderedProducts = products
@@ -1683,7 +1669,7 @@ module.exports = ({ products }) => {
 };
 ```
 
-```
+```js
 // routes/products.js
 const express = require('express');
 const productsRepository = require('../repositories/products');
@@ -1740,11 +1726,11 @@ Now how do we represent a Cart? Here we observe 3 different approaches (with the
 
 We will go with solution #3!
 
-### Shopping Cart Biolerplate
+### Shopping Cart Boilerplate
 
 We create a new file for our carts repo (carts.js) in repositories directory:
 
-```
+```js
 const Repository = require('./repository');
 class CartsRepository extends Repository {}
 module.exports = new CartsRepository('carts.json');
@@ -1752,7 +1738,7 @@ module.exports = new CartsRepository('carts.json');
 
 We will create a router for the Cart in routes/carts.js
 
-```
+```js
 const express = require('express');
 const router = express.Router();
 
@@ -1767,7 +1753,7 @@ And in our index.js file, we `const cartsRouter = require('./routes/carts');` an
 
 1. Button (Add to Cart) that triggers a POST form request. Attempt to add that item to a Cart.
 2. A route that displays the actual Shopping Cart content (list of items in it, their price, quantity, etc).
-3. A route that handles pressing the "X" (Delete) buttons by each product on the page mentioned above. This is done via a form submittion.
+3. A route that handles pressing the "X" (Delete) buttons by each product on the page mentioned above. This is done via a form submission.
 4. (Technically a route for when the "Buy" / "Checkout" button is clicked, but we don't implement purchasing)
 
 ### Submission Options
@@ -1780,19 +1766,19 @@ How can we signal which product we are adding to the cart?
 
 For variety sake, we will try approach #2:
 
-```
+```js
 // views/products/index.js
-<form action="/cart/products/" method="POST">
-    <input hidden value="${product.id}" name="productId"/>
-    <button class="button has-icon is-inverted">
-      <i class="fa fa-shopping-cart"></i> Add to cart
-    </button>
-  </form>
+<form action='/cart/products/' method='POST'>
+  <input hidden value='${product.id}' name='productId' />
+  <button class='button has-icon is-inverted'>
+    <i class='fa fa-shopping-cart'></i> Add to cart
+  </button>
+</form>
 ```
 
 And in our routes/carts.js:
 
-```
+```js
 // Receive a POST request to add an item to a cart
 router.post('/cart/products', async (req, res) => {
   const { productId } = req.body;
@@ -1810,7 +1796,7 @@ To create our Cart functionality, we unfortunately have several corner cases to 
 3. After we find the cart of either of the 2 previous user scenarios, we then have to decide whether or not there's already a product in that cart's product array that already contains that product ID.
 4. There are no items yet, we have to take the product ID and add it in fresh to the product array.
 
-```
+```js
 // Receive a POST request to add an item to a cart
 router.post('/cart/products', async (req, res) => {
   const { productId } = req.body;
@@ -1858,8 +1844,8 @@ router.post('/cart/products', async (req, res) => {
 
 ### Adding Items to a Cart
 
-```
-// Slightly cleaner way rather than using isItemUniqe flag
+```js
+// Slightly cleaner way rather than using isItemUnique flag
 const existingItem = cart.items.find((item) => {
   return item.id === productId;
 });
@@ -1873,7 +1859,7 @@ if (existingItem) {
 
 ### Displaying Cart Items
 
-```
+```js
 // In views/carts/show.js
 const layout = require('../layout');
 
@@ -1898,7 +1884,7 @@ module.exports = ({ items }) => {
 };
 ```
 
-```
+```js
 // In routes/cart.js
 const cartShowTemplate = require('../views/carts/show');
 
@@ -1930,14 +1916,14 @@ router.get('/cart', async (req, res) => {
 
 To total the items in the cart, we can do two options:
 
-```
+```js
 let totalPrice = 0;
 for (let item of items) { totalPrice += item.quantity * item.product.price;
 ```
 
 Or using the array.reduce() function:
 
-```
+```js
 const totalPrice = items.reduce((prev, item) => {
   return prev + item.quantity * item.product.price;
 }, 0);
@@ -1945,9 +1931,9 @@ const totalPrice = items.reduce((prev, item) => {
 
 ### Removing Cart Items
 
-We will wrap our Delete buttin in a form, and give it a hidden input with appropriate value and name to tell our server which product to remove:
+We will wrap our Delete button in a form, and give it a hidden input with appropriate value and name to tell our server which product to remove:
 
-```
+```html
 <form method="POST" action="/cart/products/delete">
   <input hidden value="${item.id}" name="itemId" />
   <button class="button is-danger">
@@ -1962,7 +1948,7 @@ We will wrap our Delete buttin in a form, and give it a hidden input with approp
 
 We can handle our deletion request as follows:
 
-```
+```js
 // Receive a POST request to delete an item from a cart
 router.post('/cart/products/delete', async (req, res) => {
   const { itemId } = req.body;
