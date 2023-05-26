@@ -1964,3 +1964,331 @@ router.post('/cart/products/delete', async (req, res) => {
 ```
 
 #### `Originally Completed: 10/29/2021`
+
+## Section 33: Building a Testing Framework From Scratch
+
+#### `Originally Started: 5/25/2023`
+
+### Test Framework Requirements
+
+This section will be a culmination of a lot of JavaScript / Node concepts. In it, we will be creating our own testing framework!
+
+Testing Framework Requirements:
+
+- Must be a Node-based CLI framework
+- Must be able to test browser-based JS apps(!!!)
+- Must require very, very little setup
+- Must be able to test a _whole_ application, not just one little widget
+- CLI must have a 'watch mode' so we don't have to keep restarting it over and over
+- CLI must automatically find and run all files in our project that have a name of '\*.test.js'
+
+### Project Setup
+
+Let's create a new directory to house our testing framework. Create a new folder called _tme_ (Test Me -- the name of our framework). CD into the directory, and generate a new package.json file via npm init -y.
+
+Let's prioritize some features to start with! We know we want a Node-based CLI framework. So that means we need to be able to run our project from the command line from _any_ directory. To implement this, we'll need to introduce code to our entry point file (index.js), as well as our package.json file.
+
+Inside index.js, add:
+
+```js
+#!/usr/bin/env node
+
+console.log('Running test...');
+```
+
+Inside our package.json file, add:
+
+```
+"bin": {
+  "tme": "./index.js"
+}
+```
+
+Finally, inside of our project directory, run `npm link`. Now, from _any_ directory in the command line, we can run `tme`, which will execute the console command we have in our entry point file.
+
+### Implementation Steps
+
+There are four major steps to focus on for our testing framework:
+
+1. File collection
+   - Find all files ending in '\*.test.js' _recursively_ through a target folder, as well as any nested folders
+   - Store a reference to each file we find
+   - After getting a full list of the test files, execute them one by one
+2. Test environment setup
+3. Test file execution
+   - Actually execute each test file, one by one
+   - Watch for any errors that occur
+4. Report results
+   - Tabulate all the test results and report them to the user
+
+Let's begin by creating a new file in our project directory, called runner.js. This file will be responsible for file collection code, some environment setup, and running the test files. Begin with some skeleton code for a class called Runner:
+
+```js
+class Runner {
+  constructor() {
+    this.files = [];
+  }
+
+  collectFiles() {}
+}
+
+module.exports = Runner;
+```
+
+### Walking a Directory Structure
+
+We can view a directory structure as the data structure called a _tree_. Therefore, it is important to know how to iterate through a tree data structure. We can use the breadth-first search, or the depth-first search. Here, we will utilize a breadth-first algorithm.
+
+**Breadth First Search**
+
+In this search, we visit each node in the tree, starting from the root node. We then look at each file/folder inside of the root node, and add it onto an array. We then visit each of those array elements one by one, asking if that element has children of its own (if it's a folder). If it does, we push those children onto the array as well. We continue until we reach the end of the array.
+
+Four our testing framework, we can then look at each of the elements that were pushed into the array and look for ones that end with '\*.test.js'. For this, we will make use of the `fs` Node module.
+
+### Implementing Breadth First Search
+
+We will modify the typical breadth first search algorithm to match our project's needs. Namely, rather than pushing every single child into the array and then determining if it has its own children, we will only push elements that are folders _or_ if the file ends with '\*.test.js'. After all, files will never have children, so pushing them into the array is unnecessary (unless they are a test file!).
+
+Let's add some code to `collectFiles`:
+
+```js
+class Runner {
+  constructor() {
+    this.testFiles = [];
+  }
+
+  async collectFiles(targetPath) {
+    const files = await fs.promises.readdir(targetPath);
+  }
+}
+```
+
+And also to index.js:
+
+```js
+const Runner = require('./runner');
+const runner = new Runner();
+const run = async () => {
+  const results = await runner.collectFiles(process.cwd());
+  console.log(results);
+};
+run();
+```
+
+Note we use `process.cwd()` to retrieve our current working directory (where we ran the tme command from). At this point, we have retrieved our initial children files/folders, and print them out to the console.
+
+### Collecting Test Files
+
+We will add logic to iterate over files/folders in our target directory, noting if they are a file or a folder, and pushing the ones with `\*.test.js` into our `testFiles` array.
+
+```js
+async collectFiles(targetPath) {
+    const files = await fs.promises.readdir(targetPath);
+
+    for (let file of files) {
+      const filePath = path.join(targetPath, file);
+      const stats = await fs.promises.lstat(filePath);
+
+      if (stats.isFile() && file.includes('.test.js')) {
+        this.testFiles.push({ name: filePath });
+      } else if (stats.isDirectory()) {
+        const childFiles = await fs.promises.readdir(filePath);
+        files.push(...childFiles.map((f) => path.join(file, f)));
+      }
+    }
+  }
+```
+
+Note: Stephen over-complicates this logic! Rather than implementing the logic for a breadth first search ourselves, we can add several useful options to `fs.promises.readdir()`:
+
+```js
+async collectFiles(targetPath) {
+  const files = await fs.promises.readdir(targetPath, {
+    withFileTypes: true,
+    recursive: true,
+  });
+
+  this.testFiles =  [...files.filter((file) => file.isFile() && file.name.endsWith('test.js'))];
+}
+```
+
+### Running Test Files
+
+Now we have to think about how we are actually going to execute each of the test files we found in our search. For now, we will introduce the following method in our `Runner` class:
+
+```js
+  async runTests() {
+    for (let file of this.testFiles) {
+      require(file.name);
+    }
+  }
+```
+
+By calling `require(file.name)`, Node is going to find the file, load up all the code inside of it, and execute all the code inside.
+
+We now successfully find test files and execute them; but we need to implement actual test framework logic!
+
+### A Quick Test Harness
+
+We will quickly create a sample project that will serve as a test case for our testing framework! Let's create a folder inside our tme directory called 'sampleproject'. In it, create an index.js file with the following:
+
+```js
+module.exports = {
+  forEach(arr, fn) {
+    for (let element of arr) {
+      fn(element);
+    }
+  },
+};
+```
+
+And a 'test' folder with a 'forEach.test.js' file with the following:
+
+```js
+const assert = require('assert');
+const { forEach } = require('../index');
+
+it('Should sum an array', () => {
+  const numbers = [1, 2, 3];
+  let total = 0;
+  forEach(numbers, () => (value) => (total += value));
+
+  assert.strictEqual(total, 6);
+});
+```
+
+### Implementing 'beforeEach' and 'it'
+
+(Rather confusing section!)
+
+How can we let our test files aware that `it()` and `beforeEach()` exist? We can attach them to the `global` object, which all files will have access to. Add the following inside runner.js:
+
+```js
+  async runTests() {
+    for (let file of this.testFiles) {
+      // Stephen puts the logic for global.beforeEach and global.it here, but I believe it can be set up outside of the loop?
+      const beforeEaches = [];
+      global.beforeEach = (fn) => {
+        beforeEaches.push(fn);
+      };
+      global.it = (description, fn) => {
+        console.log(description);
+        beforeEaches.forEach((func) => func());
+        fn();
+      };
+      require(file.name);
+    }
+  }
+```
+
+And also update forEach.test.js with the following:
+
+```js
+const assert = require('assert');
+const { forEach } = require('../index');
+
+let numbers;
+
+// Define one (of possibly many) beforeEach function
+beforeEach(() => {
+  numbers = [1, 2, 3];
+});
+
+it('Should sum an array', () => {
+  let total = 0;
+  numbers = [1, 2, 3];
+  forEach(numbers, (value) => (total += value));
+
+  assert.strictEqual(total, 6);
+  numbers.push(4, 5, 6);
+});
+
+// If our beforeEach function is working properly, this test should pass. If not, the elements we pushed to the numbers array in the above test persisted, so this test will fail.
+it('beforeEach is ran each time', () => {
+  assert.strictEqual(numbers.length, 3);
+});
+```
+
+### Adding Basic Reporting
+
+As it stands, any time any function passed into `it()` fails, our entire test program fails entirely, and stops executing. We need to ensure we handle any individual errors that occur when our tests are run (which will be happening frequently!). We need to wrap our function call in a `try-catch`:
+
+```js
+global.it = (description, fn) => {
+  beforeEaches.forEach((func) => func());
+  try {
+    fn();
+    console.log(`OK - ${description}`);
+  } catch (err) {
+    console.log(`X - ${description}`);
+    console.log('\t', err.message);
+  }
+};
+```
+
+There may also be an error in one of the files we are requiring, so we wrap that in a `try-catch` as well:
+
+```js
+try {
+  require(file.name);
+} catch (err) {
+  console.log('X - Error Loading File', file.name);
+  console.log(err);
+}
+```
+
+With that, we now have rudimentary reporting for our tests. Next, we will make it more presentable!
+
+### Adding Colors
+
+To make our console.log outputs easier to read and interpret, we can add some better formatting and color coding.
+
+Let's use the `chalk` library (again).
+
+```
+npm install chalk
+```
+
+In our `console.log` calls, we can now wrap our input with calls to various `chalk` methods. Specifically, we want the ones that introduce color to the output, such as `chalk.green(str)` and `chalk.red(str)`.
+
+### Better Formatting
+
+In this section, we introduce some simple formatting to our report output. Namely, we give some tabs every time we report the status of a test. We also make use of a regular expression to replace every newline with a newline followed by two tabs.
+
+Along with the coloring via the chalk library, our reports done through console.log in the `runTests` method in the `runner` class now looks as follows:
+
+```js
+async runTests() {
+    for (let file of this.testFiles) {
+      console.log(chalk.gray(`---- ${file.displayName}`));
+      const beforeEaches = [];
+      global.beforeEach = (fn) => {
+        beforeEaches.push(fn);
+      };
+      global.it = (description, fn) => {
+        beforeEaches.forEach((func) => func());
+        try {
+          fn();
+          console.log(chalk.green(`\tOK - ${description}`));
+        } catch (err) {
+          const message = err.message.replace(/\n/g, '\n\t\t');
+          console.log(chalk.red(`\tX - ${description}`));
+          console.log(chalk.red('\t', message));
+        }
+      };
+
+      try {
+        require(file.name);
+      } catch (err) {
+        console.log('X - Error Loading File', file.name);
+        console.log(err);
+      }
+    }
+  }
+```
+
+### Ignoring Directories
+
+As it stands, our testing framework has a big issue when loading files: It looks at files in the `node_modules` directory! In many cases, files ending with '.test.js' will be found, and we attempt to run them. These files were not made with our testing library in mind, and will clearly cause errors. And, in general, we tend not to watch to run the tests of our dependencies -- that is up to the node modules themselves to do.
+
+We need to ignore this directory in our algorithm!
