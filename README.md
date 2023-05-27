@@ -2292,3 +2292,202 @@ async runTests() {
 As it stands, our testing framework has a big issue when loading files: It looks at files in the `node_modules` directory! In many cases, files ending with '.test.js' will be found, and we attempt to run them. These files were not made with our testing library in mind, and will clearly cause errors. And, in general, we tend not to watch to run the tests of our dependencies -- that is up to the node modules themselves to do.
 
 We need to ignore this directory in our algorithm!
+
+### Running Browser-Based JavaScript
+
+How will we run a browser-based application at the terminal!
+
+Cheat! Run a library inside testing tool that will simulate a browser inside of Node.js.
+
+We will use **jsdom**.
+
+```
+npm i jsdom
+```
+
+Example usage:
+
+```js
+const jsdom = require('jsdom');
+const { JSDOM } = jsdom;
+
+const dom = new JSDOM('<!doctype html><html><body><p>Hello World!</p></body></html>');
+console.log(dom.window.document.querySelector('p').textContent);
+```
+
+### A Sample Web App
+
+So, how will we use jsdom for testing the entire application? We'll explore that soon! For now, let's create a sample web project. We will create a simple HTML file and attach a script to it. Essentially, we will just fill in some text to indicate whether the user has input a valid email address.
+
+### Why JSDOM?
+
+Why are we using JSDOM rather than relying on the Mocha testing library?
+
+**Mocha in the Browser**
+
+| createAutoComplete                                  | Email Validation                                         |
+| --------------------------------------------------- | -------------------------------------------------------- |
+| We had a function to run as many times as we wanted | Form logic executes instantly with index.js being loaded |
+| We could create a new autoComplete for each test    | No easy ability to bind to a _second_ form               |
+| Direct handle onto the function we want to test     | Effectively, can only run _one_ test                     |
+
+So, Mocha would be really challenging for tests such as our email validation.
+
+JSDOM, however, can make this much easier! We can make use of `JSDOM.fromFile()`. This method can load our HTML (and associated scripts it relies on), and create its own representation of the DOM that we can poke and prod for testing purposes!
+
+### Building a Render Function
+
+Next, inside our main testing framework directory, we will create a file (render.js) as a wrapper for the `JSDOM.fromFile()` method. It will load an HTML file, allow its scripts to be executed in a Node environment, and set up a virtual DOM for use in our tests.
+
+```js
+// render.js
+const path = require('path');
+const jsdom = require('jsdom');
+const { JSDOM } = jsdom;
+
+const render = async (fileName) => {
+  const filePath = path.join(process.cwd(), fileName);
+
+  const dom = await JSDOM.fromFile(filePath, {
+    runScripts: 'dangerously',
+    resources: 'usable',
+  });
+
+  return dom;
+};
+
+module.exports = render;
+```
+
+We need to make the `render` method global, for use in our test files:
+
+```js
+// runner.js
+const render = require('./render');
+
+// Add the following to runTests():
+global.render = render;
+```
+
+### HTML Element Assertions
+
+Let's write our first test for our sample web project! Create a test folder inside samplewebproject directory, and inside that test folder create `app.test.js'. Add the following, which will test the existence of our input element in our sample web app:
+
+```js
+const assert = require('assert');
+
+it('Has a text input', async () => {
+  const dom = await render('index.html');
+
+  const input = dom.window.document.querySelector('input');
+  assert(input);
+});
+```
+
+### An Incorrectly Passing Test
+
+Although everything seems to work, there is actually a small problem. Our sample web app test passes, even when we have no input element. Yet it also prints a rather long error message to the console. Why is this? In short, our `it` method is not async, so when we call `fn()` inside of it (our test case), even though `fn()` contains some async code, `it()` does not actually wait for it to finish before returning the success message. The fix is simple: We make `it()` an async function, and then `await` the call to `fn()`:
+
+```js
+// In runner.js
+
+// Inside the runTests() method:
+global.it = async (description, fn) => {
+  beforeEaches.forEach((func) => func());
+  try {
+    await fn();
+  } catch (err) {
+    // etc
+  }
+};
+```
+
+### Another Small Issue
+
+Consider the following test:
+
+```js
+it('Shows a success message with a valid email', async () => {
+  const dom = await render('index.html');
+
+  const input = dom.window.document.querySelector('input');
+  input.value = 'gibberish@test.com';
+  dom.window.document.querySelector('form').dispatchEvent(new dom.window.Event('submit'));
+
+  const h2 = dom.window.document.querySelector('h2');
+  console.log('H2:', h2.innerHTML);
+});
+```
+
+Here, we are simply using `console.log` to print out the innerHTML of our h2 element. But when we run this test, only 'H2:' is output. Why is this? We will explore and fix this in the next section!
+
+### Script Execution Delay
+
+Consider the follow flow of events over time in our application:
+
+1. We tell JSDOM to load up index.html
+2. JSDOM fetches the HTML file and parses it. 'fromFile' promise resolved!
+3. Our tests run
+4. We submit form, check h2 (in our test)
+5. Some amount of time after beginning in step 2, JSDOM finally loads up the index.js file and executes code in it. This is because, in step 2, JSDOM does not by default wait for any scripts we are referencing in the file loaded by `fromFile(file)` to actually be loaded and executed. In our case, this is the JavaScript file that watches for user input in the email form and validates it. This file is incorrectly running _after_ our tests are being ran! We must find a way to delay returning from `render` until the entire virtual DOM in JSDOM is ready to go and we can run tests on it.
+
+### Implementing a Delay
+
+The bad news about resolving the issue detailed above is JSDOM does not provide a built-in way to tell JSDOM to wait for JavaScript files to be loaded.
+
+The good news is we can implement this code ourselves easily!
+
+### Fixing a Test
+
+To introduce a delay in our `render` function, rather than returning the DOM right when it is loaded from file (which does not wait for associated scripts to be loaded as well), we can create a Promise. In this Promise, we will `resolve` after the event `DOMContentLoaded` has fired, which happens when the virtual DOM from JSDOM is ready to go.
+
+```js
+const render = async (fileName) => {
+  const filePath = path.join(process.cwd(), fileName);
+
+  const dom = await JSDOM.fromFile(filePath, {
+    runScripts: 'dangerously',
+    resources: 'usable',
+  });
+
+  return new Promise((resolve, reject) => {
+    dom.window.document.addEventListener('DOMContentLoaded', () => {
+      resolve(dom);
+    });
+  });
+};
+```
+
+### Fixing a Test
+
+Now that we have appropriately delayed execution of our tests, we can write a proper test case to check for the content of our h2 upon a successful submission of the user's email:
+
+```js
+it('Shows a success message with a valid email', async () => {
+  const dom = await render('index.html');
+
+  const input = dom.window.document.querySelector('input');
+  input.value = 'gibberish@test.com';
+  dom.window.document.querySelector('form').dispatchEvent(new dom.window.Event('submit'));
+
+  const h2 = dom.window.document.querySelector('h2');
+  assert.strictEqual(h2.innerHTML, 'Looks good!');
+});
+```
+
+Conversely, we can write a test case for when the user enters an invalid email:
+
+```js
+it('Shows an e rror message with an invalid email', async () => {
+  const dom = await render('index.html');
+
+  const input = dom.window.document.querySelector('input');
+  input.value = 'gibberishtest.com';
+  dom.window.document.querySelector('form').dispatchEvent(new dom.window.Event('submit'));
+
+  const h2 = dom.window.document.querySelector('h2');
+  assert.strictEqual(h2.innerHTML, 'Invalid email');
+});
+```
+
+And there you have it! With not too many lines of code, we have our own testing framework!
